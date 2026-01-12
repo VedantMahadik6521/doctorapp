@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "324841945620",
+    "project_id": "doctor-d4h",
+    "storage_bucket": "doctor-d4h.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324841945620:android:3bd79b244f13e3969c0501",
+        "android_client_info": {
+          "package_name": "com.doctorapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdH1Dzj13IprN5JZ8iVZgVwoFlchcLNDw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
