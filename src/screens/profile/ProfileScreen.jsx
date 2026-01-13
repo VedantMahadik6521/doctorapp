@@ -1,3 +1,4 @@
+//heyy broo
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -10,10 +11,19 @@ import {
   Alert,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { pick, types, isCancel, keepLocalCopy } from '@react-native-documents/picker';
+import RNFS from 'react-native-fs';
 
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+
+const cleanString = v => (typeof v === 'string' ? v.trim() : '');
+const cleanNumber = v => {
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+};
+
 
 const ProfileScreen = () => {
   /* ---------------- STATES ---------------- */
@@ -51,18 +61,62 @@ const ProfileScreen = () => {
     });
   };
 
-  const pickDocuments = () => {
+  const pickDocuments = async () => {
     if (!isEditing) return;
-    launchImageLibrary({ mediaType: 'photo', selectionLimit: 0 }, res => {
-      if (!res.didCancel && res.assets?.length) {
-        setDocuments(res.assets);
+    try {
+      const result = await pick({
+        allowMultiSelection: true,
+        type: [types.allFiles],
+      });
+
+      const sanitizedResult = result.map((file, index) => {
+        if (!file.name) {
+          const validTypes = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'application/pdf': 'pdf',
+          };
+          const ext = validTypes[file.type] || 'tmp';
+          return { ...file, name: `upload_${Date.now()}_${index}.${ext}` };
+        }
+        return file;
+      });
+
+      const localCopies = await keepLocalCopy({
+        files: sanitizedResult,
+        destination: 'cachesDirectory',
+      });
+
+      setDocuments(localCopies);
+    } catch (err) {
+      if (isCancel(err)) {
+        // User cancelled the picker, do nothing
+      } else {
+        console.error('Picker Error', err);
+        Alert.alert('Error', 'Failed to pick documents');
       }
-    });
+    }
   };
 
+  /* ---------------- HELPERS ---------------- */
+
   const uploadFile = async (uri, path) => {
+    console.log(`Uploading file. URI: ${uri}, Path: ${path}`);
     const ref = storage().ref(path);
-    await ref.putFile(uri);
+    if (uri.startsWith('content://')) {
+      // Decode URI just in case (though RNFS usually handles it)
+      console.log(`Detected content URI. Reading via RNFS. URI: ${uri}`);
+
+      try {
+        const base64Data = await RNFS.readFile(uri, 'base64');
+        await ref.putString(base64Data, 'base64');
+      } catch (err) {
+        console.error('RNFS read failed', err);
+        throw err;
+      }
+    } else {
+      await ref.putFile(uri);
+    }
     return await ref.getDownloadURL();
   };
 
@@ -81,56 +135,114 @@ const ProfileScreen = () => {
 
   const handleSave = async () => {
     if (!isFormComplete) return;
-
+  
+    let currentStep = 'Initializing';
+  
     try {
       const user = auth().currentUser;
-      if (!user) return;
-
-      // Upload profile image
+      if (!user) throw new Error('No authenticated user');
+  
+      /* ---------- UPLOAD FILES ---------- */
+  
+      currentStep = 'Uploading Profile Image';
       const profileImageUrl = await uploadFile(
         profileImage.uri,
         `doctors/${user.uid}/profile.jpg`
       );
-
-      // Upload signature
+  
+      currentStep = 'Uploading Signature';
       const signatureUrl = await uploadFile(
         signature.uri,
         `doctors/${user.uid}/signature.jpg`
       );
-
-      // Upload documents
+  
+      currentStep = 'Uploading Documents';
       const documentUrls = [];
+  
       for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        const extension = doc.name?.split('.').pop() || 'jpg';
+  
+        let fileUri = doc.fileCopyUri || doc.uri || doc.sourceUri;
+        if (!fileUri || typeof fileUri !== 'string') continue;
+  
         const url = await uploadFile(
-          documents[i].uri,
-          `doctors/${user.uid}/documents/doc_${i}.jpg`
+          fileUri,
+          `doctors/${user.uid}/documents/doc_${i}.${extension}`
         );
+  
         documentUrls.push(url);
       }
-
-      // Save Firestore data
-      await firestore()
-        .collection('doctors')
-        .doc(user.uid)
-        .update({
-          ...form,
-          profileImageUrl,
-          signatureUrl,
-          documentUrls,
+  
+      /* ---------- FIRESTORE TRANSACTION ---------- */
+  
+      currentStep = 'Saving to Firestore';
+  
+      const doctorRef = firestore().collection('doctors').doc(user.uid);
+      const counterRef = firestore().collection('counters').doc('doctors');
+  
+      await firestore().runTransaction(async transaction => {
+        const doctorDoc = await transaction.get(doctorRef);
+        const counterDoc = await transaction.get(counterRef);
+      
+        let currentId = 100000;
+      
+        if (counterDoc.exists) {
+          const data = counterDoc.data();
+          if (data && typeof data.currentId === 'number') {
+            currentId = data.currentId;
+          }
+        }
+      
+        const newDoctorId = currentId + 1;
+      
+        transaction.set(
+          counterRef,
+          { currentId: newDoctorId },
+          { merge: true }
+        );
+      
+        const safeData = {
+          regNo: cleanString(form.regNo),
+          city: cleanString(form.city),
+          qualification: cleanString(form.qualification),
+          speciality: cleanString(form.speciality),
+          subSpeciality: cleanString(form.subSpeciality),
+          experience: cleanNumber(form.experience),
+          charge5: cleanNumber(form.charge5),
+          charge10: cleanNumber(form.charge10),
+      
+          profileImageUrl: profileImageUrl || '',
+          signatureUrl: signatureUrl || '',
+          documentUrls: Array.isArray(documentUrls) ? documentUrls : [],
+      
+          doctorId: newDoctorId,
           profileCompleted: true,
           updatedAt: firestore.FieldValue.serverTimestamp(),
-        });
-
+        };
+      
+        if (!doctorDoc.exists) {
+          transaction.set(doctorRef, safeData);
+        } else {
+          transaction.update(doctorRef, safeData);
+        }
+      });
+      
+  
       Alert.alert(
         'Profile Submitted',
         'Your profile has been sent for verification.',
         [{ text: 'OK', onPress: () => setIsEditing(false) }]
       );
     } catch (err) {
-      console.log(err);
-      Alert.alert('Error', 'Failed to save profile');
+      console.error('Profile Save Error:', err);
+      Alert.alert(
+        'Save Failed',
+        `Error during "${currentStep}":\n${err.message}`
+      );
     }
   };
+  
 
   /* ---------------- UI ---------------- */
 
@@ -184,7 +296,18 @@ const ProfileScreen = () => {
       <UploadButton text="Upload Documents" onPress={pickDocuments} disabled={!isEditing} />
       <View style={styles.previewRow}>
         {documents.map((doc, i) => (
-          <Image key={i} source={{ uri: doc.uri }} style={styles.docPreview} />
+          <View key={i} style={styles.docPreviewContainer}>
+            {doc.type && doc.type.startsWith('image/') ? (
+              <Image source={{ uri: doc.uri }} style={styles.docPreview} />
+            ) : (
+              <View style={[styles.docPreview, styles.docPlaceholder]}>
+                <Text style={{ fontSize: 24 }}>📄</Text>
+                <Text style={{ fontSize: 8, textAlign: 'center' }} numberOfLines={1}>
+                  {doc.name}
+                </Text>
+              </View>
+            )}
+          </View>
         ))}
       </View>
 
@@ -299,6 +422,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 25,
     marginBottom: 30,
+  },
+  docPreviewContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docPlaceholder: {
+    backgroundColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 5,
   },
   saveText: {
     color: '#fff',
