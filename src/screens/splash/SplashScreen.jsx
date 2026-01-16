@@ -1,54 +1,76 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+} from 'react-native';
+import auth from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SplashScreen = ({ navigation }) => {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace('Welcome');
-    }, 2000);
+    const bootstrap = async () => {
+      const user = auth().currentUser;
+      const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
 
-    return () => clearTimeout(timer);
-  }, [navigation]);
+      setTimeout(() => {
+        if (user) {
+          navigation.replace('EntryGate');
+        } else if (!hasSeenWelcome) {
+          navigation.replace('Welcome');
+        } else {
+          navigation.replace('Login');
+        }
+      }, 1500);
+    };
+
+    bootstrap();
+  }, []);
 
   return (
-    <LinearGradient
-      colors={['#1FA64B', '#4C2C8A']}
-      style={styles.container}
-    >
+    <View style={styles.container}>
+      {/* Logo */}
       <Image
-        source={require('../../assets/images/logo.png')}
+        source={require('../../assets/images/splash_logo.png')}
         style={styles.logo}
       />
 
-      <Text style={styles.title}>Doctor4Home</Text>
-      <Text style={styles.subtitle}>Healthcare Redefined</Text>
-    </LinearGradient>
+      {/* App Name */}
+      <Text style={styles.appName}>Doctor4Home</Text>
+
+      {/* Tagline */}
+      <Text style={styles.tagline}>Healthcare Redefined</Text>
+    </View>
   );
 };
 
 export default SplashScreen;
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
     resizeMode: 'contain',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  appName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#000',
   },
-  subtitle: {
-    fontSize: 16,
-    marginTop: 8,
-    color: '#E0E0E0',
+  tagline: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
 });

@@ -8,7 +8,6 @@ import {
   Alert,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 
 const OtpScreen = ({ route, navigation }) => {
   const { confirm, phone } = route.params;
@@ -23,31 +22,10 @@ const OtpScreen = ({ route, navigation }) => {
 
     setLoading(true);
     try {
-      // Verify OTP
       await confirm.confirm(otp);
 
-      const user = auth().currentUser;
-
-      if (!user) {
-        Alert.alert('Error', 'User not found');
-        return;
-      }
-
-      // Check doctor profile
-      const docRef = firestore()
-        .collection('doctors')
-        .doc(user.uid);
-
-      const docSnap = await docRef.get();
-
-      if (
-        docSnap.exists &&
-        docSnap.data()?.profileCompleted === true
-      ) {
-        navigation.replace('Home');
-      } else {
-        navigation.replace('Register');
-      }
+      // 🔥 SESSION CONTROLLED BY ENTRY GATE
+      navigation.replace('EntryGate');
     } catch (error) {
       Alert.alert('Invalid OTP', 'Please try again');
     }

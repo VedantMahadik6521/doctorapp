@@ -33,27 +33,22 @@ const RegisterScreen = ({ navigation }) => {
     try {
       setLoading(true);
       const user = auth().currentUser;
+      if (!user) return;
 
-      if (!user) {
-        Alert.alert('Error', 'User not authenticated');
-        return;
-      }
+      await firestore().collection('doctors').doc(user.uid).set({
+        name,
+        specialization,
+        location,
+        phone: user.phoneNumber,
+        profileCompleted: false,
+        verified: false,
+        isOnline: false,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
 
-      await firestore()
-        .collection('doctors')
-        .doc(user.uid)
-        .set({
-          name,
-          specialization,
-          location,
-          phone: user.phoneNumber,
-          verified: false,
-          profileCompleted: true, // 🔥 KEY FIX
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-
-      navigation.replace('Home');
-    } catch (error) {
+      // 🔥 SESSION CONTROL
+      navigation.replace('EntryGate');
+    } catch {
       Alert.alert('Error', 'Failed to create profile');
     }
 
@@ -62,11 +57,7 @@ const RegisterScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#4B2E83', '#6A5ACD']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#4B2E83', '#6A5ACD']} style={styles.header}>
         <Text style={styles.headerTitle}>Sign up to</Text>
         <Text style={styles.headerTitle}>your Account</Text>
         <Text style={styles.headerSubtitle}>
@@ -74,47 +65,24 @@ const RegisterScreen = ({ navigation }) => {
         </Text>
       </LinearGradient>
 
-      {/* Card */}
       <View style={styles.card}>
         <Text style={styles.label}>Name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter full name"
-          value={name}
-          onChangeText={setName}
-        />
+        <TextInput style={styles.input} value={name} onChangeText={setName} />
 
         <Text style={styles.label}>Specialization</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Cardiologist"
-          value={specialization}
-          onChangeText={setSpecialization}
-        />
+        <TextInput style={styles.input} value={specialization} onChangeText={setSpecialization} />
 
         <Text style={styles.label}>Location</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="City / Area"
-          value={location}
-          onChangeText={setLocation}
-        />
+        <TextInput style={styles.input} value={location} onChangeText={setLocation} />
 
-        <TouchableOpacity
-          style={styles.termsRow}
-          onPress={() => setAccepted(!accepted)}
-        >
+        <TouchableOpacity style={styles.termsRow} onPress={() => setAccepted(!accepted)}>
           <View style={[styles.checkbox, accepted && styles.checked]} />
           <Text style={styles.termsText}>
             These Terms and Conditions constitute a legally binding agreement.
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleRegister}
-          disabled={loading}
-        >
+        <TouchableOpacity style={styles.button} onPress={handleRegister}>
           <Text style={styles.buttonText}>
             {loading ? 'Creating...' : 'Create Account'}
           </Text>
@@ -125,6 +93,9 @@ const RegisterScreen = ({ navigation }) => {
 };
 
 export default RegisterScreen;
+
+/* styles unchanged */
+
 
 const styles = StyleSheet.create({
   header: {

@@ -9,6 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -39,14 +40,20 @@ const WelcomeScreen = ({ navigation }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
 
-  const handleNext = () => {
+  const finishWelcome = async () => {
+    // 🔐 Mark welcome as seen (VERY IMPORTANT)
+    await AsyncStorage.setItem('hasSeenWelcome', 'true');
+    navigation.replace('Login');
+  };
+
+  const handleNext = async () => {
     if (currentIndex < slides.length - 1) {
       flatListRef.current.scrollToIndex({
         index: currentIndex + 1,
         animated: true,
       });
     } else {
-      navigation.replace('Login');
+      await finishWelcome();
     }
   };
 
@@ -58,10 +65,7 @@ const WelcomeScreen = ({ navigation }) => {
       style={styles.container}
     >
       {/* Skip */}
-      <TouchableOpacity
-        style={styles.skip}
-        onPress={() => navigation.replace('Login')}
-      >
+      <TouchableOpacity style={styles.skip} onPress={finishWelcome}>
         <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
@@ -69,11 +73,11 @@ const WelcomeScreen = ({ navigation }) => {
       <FlatList
         ref={flatListRef}
         data={slides}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
+        onMomentumScrollEnd={e => {
           const index = Math.round(
             e.nativeEvent.contentOffset.x / width
           );
@@ -114,6 +118,8 @@ const WelcomeScreen = ({ navigation }) => {
 };
 
 export default WelcomeScreen;
+
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   container: {

@@ -1,5 +1,6 @@
 //heyy broo
 import React, { useState, useMemo } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -26,6 +27,7 @@ const cleanNumber = v => {
 
 
 const ProfileScreen = () => {
+  const navigation = useNavigation();
   /* ---------------- STATES ---------------- */
 
   const [isEditing, setIsEditing] = useState(false);
@@ -135,73 +137,73 @@ const ProfileScreen = () => {
 
   const handleSave = async () => {
     if (!isFormComplete) return;
-  
+
     let currentStep = 'Initializing';
-  
+
     try {
       const user = auth().currentUser;
       if (!user) throw new Error('No authenticated user');
-  
+
       /* ---------- UPLOAD FILES ---------- */
-  
+
       currentStep = 'Uploading Profile Image';
       const profileImageUrl = await uploadFile(
         profileImage.uri,
         `doctors/${user.uid}/profile.jpg`
       );
-  
+
       currentStep = 'Uploading Signature';
       const signatureUrl = await uploadFile(
         signature.uri,
         `doctors/${user.uid}/signature.jpg`
       );
-  
+
       currentStep = 'Uploading Documents';
       const documentUrls = [];
-  
+
       for (let i = 0; i < documents.length; i++) {
         const doc = documents[i];
         const extension = doc.name?.split('.').pop() || 'jpg';
-  
+
         let fileUri = doc.fileCopyUri || doc.uri || doc.sourceUri;
         if (!fileUri || typeof fileUri !== 'string') continue;
-  
+
         const url = await uploadFile(
           fileUri,
           `doctors/${user.uid}/documents/doc_${i}.${extension}`
         );
-  
+
         documentUrls.push(url);
       }
-  
+
       /* ---------- FIRESTORE TRANSACTION ---------- */
-  
+
       currentStep = 'Saving to Firestore';
-  
+
       const doctorRef = firestore().collection('doctors').doc(user.uid);
       const counterRef = firestore().collection('counters').doc('doctors');
-  
+
       await firestore().runTransaction(async transaction => {
         const doctorDoc = await transaction.get(doctorRef);
         const counterDoc = await transaction.get(counterRef);
-      
+
         let currentId = 100000;
-      
+
         if (counterDoc.exists) {
           const data = counterDoc.data();
           if (data && typeof data.currentId === 'number') {
             currentId = data.currentId;
           }
         }
-      
+
         const newDoctorId = currentId + 1;
-      
+
         transaction.set(
           counterRef,
           { currentId: newDoctorId },
           { merge: true }
         );
-      
+
         const safeData = {
           regNo: cleanString(form.regNo),
           city: cleanString(form.city),
@@ -211,29 +213,35 @@ const ProfileScreen = () => {
           experience: cleanNumber(form.experience),
           charge5: cleanNumber(form.charge5),
           charge10: cleanNumber(form.charge10),
-      
+
           profileImageUrl: profileImageUrl || '',
           signatureUrl: signatureUrl || '',
           documentUrls: Array.isArray(documentUrls) ? documentUrls : [],
-      
+
           doctorId: newDoctorId,
           profileCompleted: true,
           updatedAt: firestore.FieldValue.serverTimestamp(),
         };
-      
+
         if (!doctorDoc.exists) {
           transaction.set(doctorRef, safeData);
         } else {
           transaction.update(doctorRef, safeData);
         }
       });
-      
-  
+
+
       Alert.alert(
         'Profile Submitted',
         'Your profile has been sent for verification.',
-        [{ text: 'OK', onPress: () => setIsEditing(false) }]
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.replace('EntryGate'),
+          },
+        ]
       );
+
     } catch (err) {
       console.error('Profile Save Error:', err);
       Alert.alert(
@@ -242,85 +250,95 @@ const ProfileScreen = () => {
       );
     }
   };
-  
+
 
   /* ---------------- UI ---------------- */
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingBottom: 40 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.title}>Fill your professional information:</Text>
+    <View style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#000' }}>{'<'}</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#000', marginLeft: 10 }}>Profile</Text>
+      </View>
 
-      {/* Profile Image */}
-      <TouchableOpacity
-        style={styles.avatarWrapper}
-        onPress={() => pickImage(setProfileImage)}
-        disabled={!isEditing}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
       >
-        <Image
-          source={
-            profileImage
-              ? { uri: profileImage.uri }
-              : require('../../assets/images/avatar.png')
-          }
-          style={styles.avatar}
-        />
-        {isEditing && <Text style={styles.camera}>📷</Text>}
-      </TouchableOpacity>
+        <Text style={styles.title}>Fill your professional information:</Text>
 
-      <Input label="Registration Number" value={form.regNo} editable={isEditing} onChange={v => onChange('regNo', v)} />
-      <Input label="City of Practice" value={form.city} editable={isEditing} onChange={v => onChange('city', v)} />
-      <Input label="Qualification" value={form.qualification} editable={isEditing} onChange={v => onChange('qualification', v)} />
-      <Input label="Speciality" value={form.speciality} editable={isEditing} onChange={v => onChange('speciality', v)} />
-
-      <View style={styles.row}>
-        <SmallInput label="Further Specialization" value={form.subSpeciality} editable={isEditing} onChange={v => onChange('subSpeciality', v)} />
-        <SmallInput label="Experience" value={form.experience} editable={isEditing} onChange={v => onChange('experience', v)} />
-      </View>
-
-      <Input label="Charge for 0–5 KM" value={form.charge5} editable={isEditing} onChange={v => onChange('charge5', v)} />
-      <Input label="Charge for 5–10 KM" value={form.charge10} editable={isEditing} onChange={v => onChange('charge10', v)} />
-
-      {!isEditing && (
-        <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-          <Text style={styles.editText}>Edit Information</Text>
-        </TouchableOpacity>
-      )}
-
-      <UploadButton text="Upload Signature" onPress={() => pickImage(setSignature)} disabled={!isEditing} />
-      {signature && <PreviewImage uri={signature.uri} />}
-
-      <UploadButton text="Upload Documents" onPress={pickDocuments} disabled={!isEditing} />
-      <View style={styles.previewRow}>
-        {documents.map((doc, i) => (
-          <View key={i} style={styles.docPreviewContainer}>
-            {doc.type && doc.type.startsWith('image/') ? (
-              <Image source={{ uri: doc.uri }} style={styles.docPreview} />
-            ) : (
-              <View style={[styles.docPreview, styles.docPlaceholder]}>
-                <Text style={{ fontSize: 24 }}>📄</Text>
-                <Text style={{ fontSize: 8, textAlign: 'center' }} numberOfLines={1}>
-                  {doc.name}
-                </Text>
-              </View>
-            )}
-          </View>
-        ))}
-      </View>
-
-      {isEditing && (
+        {/* Profile Image */}
         <TouchableOpacity
-          style={[styles.saveBtn, !isFormComplete && styles.disabled]}
-          disabled={!isFormComplete}
-          onPress={handleSave}
+          style={styles.avatarWrapper}
+          onPress={() => pickImage(setProfileImage)}
+          disabled={!isEditing}
         >
-          <Text style={styles.saveText}>SAVE</Text>
+          <Image
+            source={
+              profileImage
+                ? { uri: profileImage.uri }
+                : require('../../assets/images/avatar.png')
+            }
+            style={styles.avatar}
+          />
+          {isEditing && <Text style={styles.camera}>📷</Text>}
         </TouchableOpacity>
-      )}
-    </ScrollView>
+
+        <Input label="Registration Number" value={form.regNo} editable={isEditing} onChange={v => onChange('regNo', v)} />
+        <Input label="City of Practice" value={form.city} editable={isEditing} onChange={v => onChange('city', v)} />
+        <Input label="Qualification" value={form.qualification} editable={isEditing} onChange={v => onChange('qualification', v)} />
+        <Input label="Speciality" value={form.speciality} editable={isEditing} onChange={v => onChange('speciality', v)} />
+
+        <View style={styles.row}>
+          <SmallInput label="Further Specialization" value={form.subSpeciality} editable={isEditing} onChange={v => onChange('subSpeciality', v)} />
+          <SmallInput label="Experience" value={form.experience} editable={isEditing} onChange={v => onChange('experience', v)} />
+        </View>
+
+        <Input label="Charge for 0–5 KM" value={form.charge5} editable={isEditing} onChange={v => onChange('charge5', v)} />
+        <Input label="Charge for 5–10 KM" value={form.charge10} editable={isEditing} onChange={v => onChange('charge10', v)} />
+
+        {!isEditing && (
+          <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
+            <Text style={styles.editText}>Edit Information</Text>
+          </TouchableOpacity>
+        )}
+
+        <UploadButton text="Upload Signature" onPress={() => pickImage(setSignature)} disabled={!isEditing} />
+        {signature && <PreviewImage uri={signature.uri} />}
+
+        <UploadButton text="Upload Documents" onPress={pickDocuments} disabled={!isEditing} />
+        <View style={styles.previewRow}>
+          {documents.map((doc, i) => (
+            <View key={i} style={styles.docPreviewContainer}>
+              {doc.type && doc.type.startsWith('image/') ? (
+                <Image source={{ uri: doc.uri }} style={styles.docPreview} />
+              ) : (
+                <View style={[styles.docPreview, styles.docPlaceholder]}>
+                  <Text style={{ fontSize: 24 }}>📄</Text>
+                  <Text style={{ fontSize: 8, textAlign: 'center' }} numberOfLines={1}>
+                    {doc.name}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+
+        {isEditing && (
+          <TouchableOpacity
+            style={[styles.saveBtn, !isFormComplete && styles.disabled]}
+            disabled={!isFormComplete}
+            onPress={handleSave}
+          >
+            <Text style={styles.saveText}>SAVE</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -371,7 +389,16 @@ const PreviewImage = ({ uri }) => (
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#F8F9F8' },
+  container: { padding: 20 },
+  header: {
+    padding: 20,
+    paddingTop: 50, // For status bar
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
   title: { fontSize: 14, color: '#333', marginBottom: 10 },
 
   avatarWrapper: { alignSelf: 'center', marginVertical: 20 },
