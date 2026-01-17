@@ -16,6 +16,7 @@ import HomeScreen2 from '../screens/home/HomeScreen2';
 import AnalyticsScreen from '../screens/home/AnalyticsScreen';
 import AllTestimonialsScreen from '../screens/home/AllTestimonialsScreen';
 import NotificationScreen from '../screens/home/NotificationScreen';
+import RequestDetailsScreen from '../screens/request/RequestDetailsScreen';
 
 /* Entry Gate */
 import AppEntryGate from './AppEntryGate';
@@ -58,6 +59,8 @@ const RootNavigator = () => {
 
       {/* Main Dashboard (Drawer + Tabs + Home2) */}
       <Stack.Screen name="Dashboard" component={DrawerNavigator} />
+      {/* Request Details */}
+      <Stack.Screen name="RequestDetails" component={RequestDetailsScreen} />
       {/* Keeping legacy Home temporarily if needed, but Dashboard is primary now */}
       <Stack.Screen name="Home" component={HomeScreen} />
       {/* <Stack.Screen name="Home2" component={HomeScreen2} /> Removed to force Dashboard usage */}

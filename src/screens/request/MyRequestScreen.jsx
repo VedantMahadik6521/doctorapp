@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,66 +8,103 @@ import {
     TouchableOpacity,
     TextInput,
     SafeAreaView,
-    Platform
+    Platform,
+    ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 
-// Mock Data matching the screenshot
-const REQUESTS_DATA = [
-    {
-        id: '1',
-        name: 'Siya Patil',
-        healthIssue: 'General Check-up',
-        symptoms: 'Fever & Body Pain',
-        distance: '1.5 km Away',
-        status: 'New',
-        image: 'https://randomuser.me/api/portraits/women/44.jpg', // Placeholder
-    },
-    {
-        id: '2',
-        name: 'Vedant Patil',
-        healthIssue: 'General Check-up',
-        symptoms: 'Fever & Body Pain',
-        distance: '1.5 km Away',
-        status: 'Follow Up',
-        image: 'https://randomuser.me/api/portraits/women/44.jpg', // Same user as per screenshot
-    },
-];
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 const MyRequestScreen = () => {
+    // 🔥 ALL HOOKS AT TOP (VERY IMPORTANT)
     const { theme } = useTheme();
     const navigation = useNavigation();
-    const [searchQuery, setSearchQuery] = useState('');
 
-    const filteredRequests = REQUESTS_DATA.filter(item =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const [searchQuery, setSearchQuery] = useState('');
+    const [requests, setRequests] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // 🔥 useEffect AFTER hooks
+    useEffect(() => {
+        const user = auth().currentUser;
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        const unsubscribe = firestore()
+            .collection('patients')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(
+                snapshot => {
+                    const data = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                    }));
+                    setRequests(data);
+                    setLoading(false);
+                },
+                error => {
+                    console.error('Firestore error:', error);
+                    setLoading(false);
+                }
+            );
+
+        return unsubscribe;
+    }, []);
+
+    // 🔥 SAFE RENDER CONDITIONS (AFTER HOOKS)
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.loader}>
+                <ActivityIndicator size="large" />
+            </SafeAreaView>
+        );
+    }
+
+    const filteredRequests = requests.filter(item =>
+        item.patientName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const renderRequestItem = ({ item }) => {
         const isNew = item.status === 'New';
-        const statusColor = isNew ? '#32CD32' : '#FF6347'; // Green for New, Red for Follow Up
+        const statusColor = isNew ? '#32CD32' : '#FF6347';
 
         return (
             <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
                 <View style={styles.cardHeader}>
-                    <Image source={{ uri: item.image }} style={styles.avatar} />
+                    <Image source={{ uri: item.patientImage }} style={styles.avatar} />
                     <View style={styles.cardContent}>
                         <View style={styles.nameRow}>
-                            <Text style={[styles.name, { color: theme.colors.text }]}>{item.name}</Text>
-                            <Text style={[styles.status, { color: statusColor }]}>{item.status}</Text>
+                            <Text style={[styles.name, { color: theme.colors.text }]}>
+                                {item.patientName}
+                            </Text>
+                            <Text style={[styles.status, { color: statusColor }]}>
+                                {item.status}
+                            </Text>
                         </View>
+
                         <Text style={[styles.healthIssue, { color: theme.colors.text }]}>
                             <Text style={{ fontWeight: 'bold' }}>Health Issue: </Text>
                             {item.healthIssue}
                         </Text>
+
                         <Text style={[styles.symptoms, { color: theme.colors.textSecondary }]}>{item.symptoms}</Text>
-                        <Text style={[styles.distance, { color: theme.colors.primary }]}>{item.distance}</Text>
+                        <Text style={[styles.distance, { color: theme.colors.primary }]}>
+                            {item.distance}
+                        </Text>
                     </View>
                 </View>
 
                 <View style={styles.cardFooter}>
-                    <TouchableOpacity style={[styles.detailsButton, { backgroundColor: theme.colors.primary }]}>
+                    <TouchableOpacity
+                        style={[styles.detailsButton, { backgroundColor: theme.colors.primary }]}
+                        onPress={() =>
+                            navigation.navigate('RequestDetails', { request: item })
+                        }
+                    >
                         <Text style={styles.detailsButtonText}>More Details</Text>
                     </TouchableOpacity>
                 </View>
@@ -77,38 +114,32 @@ const MyRequestScreen = () => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.navigate('HomeTab')}>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Text style={[styles.backIcon, { color: theme.colors.text }]}>{'<'}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>My Request</Text>
-                <View style={{ width: 24 }} />{/* Spacer for centering */}
+                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>My Requests</Text>
+                <View style={{ width: 24 }} />
             </View>
 
-            {/* Search Bar */}
+            {/* Search */}
             <View style={styles.searchContainer}>
                 <View style={[styles.searchBar, { backgroundColor: theme.colors.card }]}>
                     <Text style={styles.searchIcon}>🔍</Text>
                     <TextInput
-                        placeholder="Search Doctor Here..."
+                        placeholder="Search Patient..."
                         placeholderTextColor={theme.colors.textSecondary}
-                        style={[styles.searchInput, { color: theme.colors.text }]}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
+                        style={[styles.searchInput, { color: theme.colors.text }]}
                     />
                 </View>
-                <TouchableOpacity style={[styles.filterButton, { backgroundColor: theme.colors.card }]}>
-                    <Text style={{ fontSize: 18, color: theme.colors.text }}>⚡</Text>
-                </TouchableOpacity>
             </View>
 
-            {/* Request List */}
             <FlatList
                 data={filteredRequests}
                 renderItem={renderRequestItem}
                 keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
             />
         </SafeAreaView>
