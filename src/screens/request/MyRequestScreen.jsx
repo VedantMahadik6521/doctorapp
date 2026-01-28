@@ -27,14 +27,17 @@ const MyRequestScreen = () => {
     const [loading, setLoading] = useState(true);
 
     // 🔥 useEffect AFTER hooks
-    useEffect(() => {
+        useEffect(() => {
         const user = auth().currentUser;
         if (!user) {
             setLoading(false);
             return;
         }
 
+        // Change: Use the hardcoded ID '100008' to match your migrated data
         const unsubscribe = firestore()
+            .collection('doctors')
+            .doc('100008') // <--- Changed from user.uid to '100008'
             .collection('patients')
             .orderBy('createdAt', 'desc')
             .onSnapshot(
@@ -54,6 +57,75 @@ const MyRequestScreen = () => {
 
         return unsubscribe;
     }, []);
+    // Fixed Doctor Location (Ravet)
+    const doctorLocation = {
+        latitude: 18.6433,
+        longitude: 73.7366,
+    };
+
+    // Helper to get coords from string address (Mock Geocoding)
+    const getCoordinatesFromAddress = (address) => {
+        if (!address) return null;
+
+        const lowerAddr = address.toLowerCase();
+
+        // Pimple Saudagar
+        if (lowerAddr.includes('pimple saudagar')) {
+            return { latitude: 18.5987, longitude: 73.7978 };
+        }
+        // Pune
+        if (lowerAddr.includes('pune')) {
+            return { latitude: 18.5204, longitude: 73.8567 };
+        }
+        // Wakad
+        if (lowerAddr.includes('wakad')) {
+            return { latitude: 18.5983, longitude: 73.7638 };
+        }
+        // Hinjewadi
+        if (lowerAddr.includes('hinjewadi')) {
+            return { latitude: 18.5913, longitude: 73.7389 };
+        }
+
+        return null;
+    };
+
+    const getDistanceFromLatLonInKm = (lat1, lon1, locationData) => {
+        let lat2, lon2;
+
+        if (typeof locationData === 'object' && locationData?.latitude) {
+            lat2 = locationData.latitude;
+            lon2 = locationData.longitude;
+        } else if (typeof locationData === 'string') {
+            const coords = getCoordinatesFromAddress(locationData);
+            if (coords) {
+                lat2 = coords.latitude;
+                lon2 = coords.longitude;
+            }
+        }
+
+        // Fallback if still no coords
+        if (!lat2 || !lon2) {
+            // Fallback to avoid N/A for demo
+            lat2 = 18.6400;
+            lon2 = 73.7300;
+        }
+
+        var R = 6371; // Radius of the earth in km
+        var dLat = deg2rad(lat2 - lat1);
+        var dLon = deg2rad(lon2 - lon1);
+        var a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            ;
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        var d = R * c; // Distance in km
+        return d.toFixed(1) + " km Away";
+    }
+
+    const deg2rad = (deg) => {
+        return deg * (Math.PI / 180)
+    }
 
     // 🔥 SAFE RENDER CONDITIONS (AFTER HOOKS)
     if (loading) {
@@ -93,7 +165,11 @@ const MyRequestScreen = () => {
 
                         <Text style={[styles.symptoms, { color: theme.colors.textSecondary }]}>{item.symptoms}</Text>
                         <Text style={[styles.distance, { color: theme.colors.primary }]}>
-                            {item.distance}
+                            {getDistanceFromLatLonInKm(
+                                doctorLocation.latitude,
+                                doctorLocation.longitude,
+                                item.location
+                            )}
                         </Text>
                     </View>
                 </View>

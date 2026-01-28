@@ -7,6 +7,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -49,8 +50,10 @@ const VerifiedWelcomeScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       {/* Location Header */}
       <View style={styles.header}>
-        <Text style={styles.location}>📍 {location}</Text>
-        
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name="location-on" size={16} color="#000" style={{ marginRight: 5 }} />
+          <Text style={styles.location}>{location}</Text>
+        </View>
       </View>
 
       {/* Greeting */}
@@ -59,7 +62,7 @@ const VerifiedWelcomeScreen = ({ navigation, route }) => {
       {/* Info Message */}
       <View style={styles.messageBox}>
         <Text style={styles.message}>
-          Welcome, {doctorName}. Please turn your status to online 
+          Welcome, {doctorName}. Please turn your status to online
         </Text>
       </View>
 

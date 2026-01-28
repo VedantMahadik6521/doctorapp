@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 
 // Mock Data for Testimonials
@@ -106,14 +107,14 @@ const HomeScreen2 = () => {
               style={{ marginRight: 15, padding: 5 }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={{ fontSize: 24, color: '#FFFFFF' }}>☰</Text>
+              <Icon name="menu" size={24} color="#FFFFFF" />
             </TouchableOpacity>
 
             <View>
               <Text style={{ color: '#E0E0E0', fontSize: 10 }}>Location</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>{location}</Text>
-                <Text style={{ color: '#FFFFFF', fontSize: 12 }}> ▼</Text>
+                <Icon name="keyboard-arrow-down" size={12} color="#FFFFFF" style={{ marginLeft: 5 }} />
               </View>
             </View>
           </View>
@@ -121,11 +122,11 @@ const HomeScreen2 = () => {
           {/* Right: Theme Toggle & Notification */}
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity onPress={toggleTheme} style={{ marginRight: 15 }}>
-              <Text style={{ fontSize: 22 }}>{theme.isDarkMode ? '☀️' : '🌙'}</Text>
+              <Icon name={theme.isDarkMode ? 'wb-sunny' : 'nightlight-round'} size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('NotificationScreen')}>
               <View>
-                <Text style={{ fontSize: 22 }}>🔔</Text>
+                <Icon name="notifications" size={22} color="#FFFFFF" />
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>2</Text>
                 </View>
@@ -153,7 +154,7 @@ const HomeScreen2 = () => {
           onPress={() => navigation.navigate('AnalyticsScreen')} // To be added to stack
         >
           <View style={styles.analyticsIconCircle}>
-            <Text style={{ fontSize: 20 }}>📝</Text>
+            <Icon name="analytics" size={24} color="#6A0DAD" />
           </View>
           <Text style={[styles.analyticsText, { color: theme.colors.text }]}>Analytics Overview</Text>
         </TouchableOpacity>
@@ -161,7 +162,7 @@ const HomeScreen2 = () => {
 
         {/* 🔹 TESTIMONIALS SECTION */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>What our Pateints say</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>What our Doctors say</Text>
           <TouchableOpacity onPress={() => navigation.navigate('AllTestimonialsScreen')}>
             <Text style={{ color: theme.colors.primary }}>See All</Text>
           </TouchableOpacity>
@@ -205,7 +206,7 @@ const HomeScreen2 = () => {
           <View style={styles.howRow}>
             <View style={[styles.howCard, { backgroundColor: theme.colors.card }]}>
               <View style={[styles.iconBox, { backgroundColor: '#D8BFD8' }]}>
-                <Text>🔍</Text>
+                <Icon name="search" size={20} color="#6A0DAD" />
               </View>
               <View style={{ marginLeft: 10 }}>
                 <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>Complete</Text>
@@ -214,7 +215,7 @@ const HomeScreen2 = () => {
             </View>
             <View style={[styles.howCard, { backgroundColor: theme.colors.card }]}>
               <View style={[styles.iconBox, { backgroundColor: '#D8BFD8' }]}>
-                <Text>✔️</Text>
+                <Icon name="check" size={20} color="#6A0DAD" />
               </View>
               <View style={{ marginLeft: 10 }}>
                 <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>Go Online</Text>
@@ -226,7 +227,7 @@ const HomeScreen2 = () => {
           <View style={styles.howRow}>
             <View style={[styles.howCard, { backgroundColor: theme.colors.card }]}>
               <View style={[styles.iconBox, { backgroundColor: '#D8BFD8' }]}>
-                <Text>🏠</Text>
+                <Icon name="home" size={20} color="#6A0DAD" />
               </View>
               <View style={{ marginLeft: 10 }}>
                 <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>Accept</Text>
@@ -235,7 +236,7 @@ const HomeScreen2 = () => {
             </View>
             <View style={[styles.howCard, { backgroundColor: theme.colors.card }]}>
               <View style={[styles.iconBox, { backgroundColor: '#D8BFD8' }]}>
-                <Text>📄</Text>
+                <Icon name="description" size={20} color="#6A0DAD" />
               </View>
               <View style={{ marginLeft: 10 }}>
                 <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>Visit & Update</Text>

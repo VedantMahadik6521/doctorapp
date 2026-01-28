@@ -1,9 +1,11 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../context/ThemeContext';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import HomeScreen2 from '../screens/home/HomeScreen2';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import MyRequestScreen from '../screens/request/MyRequestScreen';
+import MedicalRecordsScreen from '../screens/records/MedicalRecordsScreen';
 import { View, Text } from 'react-native';
 
 // Placeholder screens for tabs not yet implemented
@@ -25,20 +27,18 @@ const TabNavigator = () => {
                 tabBarActiveTintColor: theme.colors.primary,
                 tabBarInactiveTintColor: theme.colors.textSecondary,
                 tabBarIcon: ({ focused, color, size }) => {
-                    // Using simple text/emojis since vector icons aren't installed yet
-                    // In a real app with assets, we'd use Image or Vector Icons here
-                    let icon = '❓';
-                    if (route.name === 'HomeTab') icon = '🏠';
-                    else if (route.name === 'Records') icon = '📄';
-                    else if (route.name === 'Requests') icon = '📞';
-                    else if (route.name === 'ProfileTab') icon = '👤';
+                    let iconName = 'help-outline';
+                    if (route.name === 'HomeTab') iconName = 'home';
+                    else if (route.name === 'Records') iconName = 'description';
+                    else if (route.name === 'Requests') iconName = 'list';
+                    else if (route.name === 'ProfileTab') iconName = 'person';
 
-                    return <Text style={{ fontSize: 20 }}>{icon}</Text>;
+                    return <Icon name={iconName} size={size} color={color} />;
                 }
             })}
         >
             <Tab.Screen name="HomeTab" component={HomeScreen2} options={{ title: 'Home' }} />
-            <Tab.Screen name="Records" component={RecordsScreen} />
+            <Tab.Screen name="Records" component={MedicalRecordsScreen} />
             <Tab.Screen name="Requests" component={MyRequestScreen} />
             <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: 'Profile' }} />
         </Tab.Navigator>

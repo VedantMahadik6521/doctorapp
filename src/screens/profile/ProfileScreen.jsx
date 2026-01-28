@@ -1,5 +1,5 @@
 //heyy broo
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import {
   View,
@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { pick, types, isCancel, keepLocalCopy } from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
 
@@ -37,6 +38,8 @@ const ProfileScreen = () => {
   const [documents, setDocuments] = useState([]);
 
   const [form, setForm] = useState({
+    name: '',
+    phone: '',
     regNo: '',
     city: '',
     qualification: '',
@@ -45,7 +48,67 @@ const ProfileScreen = () => {
     experience: '',
     charge5: '',
     charge10: '',
+    description: '',
   });
+
+  const [loading, setLoading] = useState(true);
+
+  /* ---------------- EFFECT: FETCH DATA ---------------- */
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const user = auth().currentUser;
+        if (!user) return;
+
+        const docRef = firestore().collection('doctors').doc(user.uid);
+        const docSnap = await docRef.get();
+
+        if (docSnap.exists) {
+          const data = docSnap.data();
+
+          setForm({
+            name: data.name || '',
+            phone: data.phone || user.phoneNumber || '',
+            regNo: data.regNo || '',
+            city: data.city || data.location || '',
+            qualification: data.qualification || '',
+            speciality: data.speciality || data.specialization || '',
+            subSpeciality: data.subSpeciality || '',
+            experience: data.experience ? String(data.experience) : '',
+            charge5: data.charge5 ? String(data.charge5) : '',
+            charge10: data.charge10 ? String(data.charge10) : '',
+            description: data.description || '',
+          });
+
+          if (data.profileImageUrl) {
+            setProfileImage({ uri: data.profileImageUrl });
+          }
+          if (data.signatureUrl) {
+            setSignature({ uri: data.signatureUrl });
+          }
+          if (data.documentUrls && Array.isArray(data.documentUrls)) {
+            // Map URLs back to a structure the UI expects (at least URI)
+            // Note: We might lose original file names if not stored separately, 
+            // but for display purposes, we can show a generic name or extract from URL.
+            const docs = data.documentUrls.map((url, index) => ({
+              uri: url,
+              name: `Document ${index + 1}`, // Generic name as fallback
+              type: 'image/jpeg', // Default assumption or need better metadata storage
+            }));
+            setDocuments(docs);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+        Alert.alert("Error", "Failed to load profile data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   /* ---------------- HELPERS ---------------- */
 
@@ -184,8 +247,7 @@ const ProfileScreen = () => {
       const counterRef = firestore().collection('counters').doc('doctors');
 
       await firestore().runTransaction(async transaction => {
-        const doctorDoc = await transaction.get(doctorRef);
-        const counterDoc = await transaction.get(counterRef);
+        const doctorDoc = await transaction.get(doctorRef); const counterDoc = await transaction.get(counterRef);
 
         let currentId = 100000;
 
@@ -205,6 +267,7 @@ const ProfileScreen = () => {
         );
 
         const safeData = {
+          name: cleanString(form.name),
           regNo: cleanString(form.regNo),
           city: cleanString(form.city),
           qualification: cleanString(form.qualification),
@@ -213,6 +276,7 @@ const ProfileScreen = () => {
           experience: cleanNumber(form.experience),
           charge5: cleanNumber(form.charge5),
           charge10: cleanNumber(form.charge10),
+          description: cleanString(form.description),
 
           profileImageUrl: profileImageUrl || '',
           signatureUrl: signatureUrl || '',
@@ -259,7 +323,7 @@ const ProfileScreen = () => {
       {/* Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#000' }}>{'<'}</Text>
+          <Icon name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#000', marginLeft: 10 }}>Profile</Text>
       </View>
@@ -285,8 +349,11 @@ const ProfileScreen = () => {
             }
             style={styles.avatar}
           />
-          {isEditing && <Text style={styles.camera}>📷</Text>}
+          {isEditing && <View style={styles.camera}><Icon name="camera-alt" size={20} color="#000" /></View>}
         </TouchableOpacity>
+
+        <Input label="Name" value={form.name} editable={isEditing} onChange={v => onChange('name', v)} />
+        <Input label="Phone Number" value={form.phone} editable={false} style={{ color: '#888' }} />
 
         <Input label="Registration Number" value={form.regNo} editable={isEditing} onChange={v => onChange('regNo', v)} />
         <Input label="City of Practice" value={form.city} editable={isEditing} onChange={v => onChange('city', v)} />
@@ -300,6 +367,16 @@ const ProfileScreen = () => {
 
         <Input label="Charge for 0–5 KM" value={form.charge5} editable={isEditing} onChange={v => onChange('charge5', v)} />
         <Input label="Charge for 5–10 KM" value={form.charge10} editable={isEditing} onChange={v => onChange('charge10', v)} />
+
+        <Input
+          label="Description"
+          value={form.description}
+          editable={isEditing}
+          onChange={v => onChange('description', v)}
+          multiline
+          numberOfLines={3}
+          style={{ height: 80, textAlignVertical: 'top' }}
+        />
 
         {!isEditing && (
           <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
@@ -318,7 +395,7 @@ const ProfileScreen = () => {
                 <Image source={{ uri: doc.uri }} style={styles.docPreview} />
               ) : (
                 <View style={[styles.docPreview, styles.docPlaceholder]}>
-                  <Text style={{ fontSize: 24 }}>📄</Text>
+                  <Icon name="description" size={24} color="#666" />
                   <Text style={{ fontSize: 8, textAlign: 'center' }} numberOfLines={1}>
                     {doc.name}
                   </Text>
@@ -346,15 +423,16 @@ export default ProfileScreen;
 
 /* ---------------- COMPONENTS ---------------- */
 
-const Input = ({ label, value, onChange, editable }) => (
+const Input = ({ label, value, onChange, editable, style, ...props }) => (
   <>
     <Text style={styles.label}>{label}</Text>
     <TextInput
-      style={[styles.input, !editable && styles.readOnly]}
+      style={[styles.input, !editable && styles.readOnly, style]}
       value={value}
       onChangeText={onChange}
       editable={editable}
       placeholder={label}
+      {...props}
     />
   </>
 );
@@ -412,6 +490,8 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 4,
     fontSize: 14,
+    color: '#333',
+    fontWeight: '300',
   },
   readOnly: { backgroundColor: '#EAEAEA' },
 
