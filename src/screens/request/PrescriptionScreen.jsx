@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -33,6 +33,24 @@ const PrescriptionScreen = () => {
     const [otp, setOtp] = useState('');
     const [isSaved, setIsSaved] = useState(false);
     const [showGenderModal, setShowGenderModal] = useState(false);
+
+
+
+    useEffect(() => {
+        if (request?.dob) {
+            // User requested logic: take last 4 digits of "DD-MM-YYYY"
+            const dobString = String(request.dob);
+            const dobYear = parseInt(dobString.slice(-4), 10);
+
+            if (!isNaN(dobYear)) {
+                const currentYear = new Date().getFullYear();
+                const calculatedAge = currentYear - dobYear;
+                if (calculatedAge >= 0) {
+                    setAge(calculatedAge.toString());
+                }
+            }
+        }
+    }, [request]);
 
     const addMedicine = () => {
         if (medicineInput.trim() === '') {

@@ -31,10 +31,11 @@ const RefundScreen = () => {
             return;
         }
 
-        // Logic to process refund goes here
-        Alert.alert('Success', 'Refund processed successfully!', [
-            { text: 'OK', onPress: () => navigation.popToTop() } // Go back to home or dashboard
-        ]);
+        navigation.navigate('PaymentMethod', {
+            amount,
+            reason,
+            upiId
+        });
     };
 
     return (

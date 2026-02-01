@@ -20,8 +20,6 @@ const SettingsAndPrivacyScreen = () => {
 
     // Privacy States
     const [pushNotifications, setPushNotifications] = useState(true);
-    const [emailUpdates, setEmailUpdates] = useState(true);
-    const [locationAccess, setLocationAccess] = useState(true);
 
     const toggleSwitch = (setter, value) => {
         setter(!value);
@@ -101,20 +99,7 @@ const SettingsAndPrivacyScreen = () => {
                     value={pushNotifications}
                     onToggle={() => toggleSwitch(setPushNotifications, pushNotifications)}
                 />
-                <SettingCard
-                    title="Email Update"
-                    subtitle="Receive appointment reminders"
-                    isSwitch
-                    value={emailUpdates}
-                    onToggle={() => toggleSwitch(setEmailUpdates, emailUpdates)}
-                />
-                <SettingCard
-                    title="Location Ascess"
-                    subtitle="Receive appointment reminders"
-                    isSwitch
-                    value={locationAccess}
-                    onToggle={() => toggleSwitch(setLocationAccess, locationAccess)}
-                />
+
 
                 {/* General Settings */}
                 <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>General Settings</Text>
@@ -124,11 +109,7 @@ const SettingsAndPrivacyScreen = () => {
                     title="Account Information"
                     hasArrow
                 />
-                <SettingCard
-                    icon={<Icon name="language" size={20} color="#7C3AED" />}
-                    title="Language"
-                    hasArrow
-                />
+
                 <SettingCard
                     icon={<Icon name="description" size={20} color="#7C3AED" />}
                     title="Terms and condition"

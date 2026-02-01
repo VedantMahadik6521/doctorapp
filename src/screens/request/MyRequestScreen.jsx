@@ -10,9 +10,13 @@ import {
     SafeAreaView,
     Platform,
     ActivityIndicator,
+    Modal,
+    ScrollView,
+    TouchableWithoutFeedback
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -26,8 +30,14 @@ const MyRequestScreen = () => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Filter States
+    const [modalVisible, setModalVisible] = useState(false);
+    const [sortBy, setSortBy] = useState('Oldest First');
+    const [filterStatus, setFilterStatus] = useState([]);
+    const [filterDistance, setFilterDistance] = useState([]);
+
     // 🔥 useEffect AFTER hooks
-        useEffect(() => {
+    useEffect(() => {
         const user = auth().currentUser;
         if (!user) {
             setLoading(false);
@@ -89,7 +99,11 @@ const MyRequestScreen = () => {
         return null;
     };
 
-    const getDistanceFromLatLonInKm = (lat1, lon1, locationData) => {
+    const deg2rad = (deg) => {
+        return deg * (Math.PI / 180)
+    }
+
+    const calculateDistance = (lat1, lon1, locationData) => {
         let lat2, lon2;
 
         if (typeof locationData === 'object' && locationData?.latitude) {
@@ -120,29 +134,89 @@ const MyRequestScreen = () => {
             ;
         var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         var d = R * c; // Distance in km
+        return d;
+    }
+
+    // Helper wrapper for UI display
+    const getDistanceFromLatLonInKm = (lat1, lon1, locationData) => {
+        const d = calculateDistance(lat1, lon1, locationData);
         return d.toFixed(1) + " km Away";
     }
 
-    const deg2rad = (deg) => {
-        return deg * (Math.PI / 180)
-    }
+
 
     // 🔥 SAFE RENDER CONDITIONS (AFTER HOOKS)
     if (loading) {
         return (
-            <SafeAreaView style={styles.loader}>
-                <ActivityIndicator size="large" />
+            <SafeAreaView style={[styles.container, styles.loader, { backgroundColor: theme.colors.background }]}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
             </SafeAreaView>
         );
     }
 
-    const filteredRequests = requests.filter(item =>
-        item.patientName?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const toggleStatusFilter = (status) => {
+        if (filterStatus.includes(status)) {
+            setFilterStatus(filterStatus.filter(s => s !== status));
+        } else {
+            setFilterStatus([...filterStatus, status]);
+        }
+    };
+
+    const toggleDistanceFilter = (distance) => {
+        if (filterDistance.includes(distance)) {
+            setFilterDistance(filterDistance.filter(d => d !== distance));
+        } else {
+            setFilterDistance([...filterDistance, distance]);
+        }
+    };
+
+    const filteredRequests = requests.filter(item => {
+        // Search
+        if (searchQuery && !item.patientName?.toLowerCase().includes(searchQuery.toLowerCase())) {
+            return false;
+        }
+
+        // Status Filter
+        if (filterStatus.length > 0 && !filterStatus.includes(item.status)) {
+            return false;
+        }
+
+        // Distance Filter
+        if (filterDistance.length > 0) {
+            const dist = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, item.location);
+            const matchesUnder2 = filterDistance.includes('Under 2km') && dist < 2;
+            const matchesUnder5 = filterDistance.includes('Under 5km') && dist < 5;
+
+            let distanceMatch = false;
+            if (filterDistance.includes('Under 2km') && matchesUnder2) distanceMatch = true;
+            if (filterDistance.includes('Under 5km') && matchesUnder5) distanceMatch = true;
+
+            if (!distanceMatch) return false;
+        }
+
+        return true;
+    }).sort((a, b) => {
+        if (sortBy === 'Oldest First') {
+            // Ascending
+            return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+        } else if (sortBy === 'Newest First') {
+            // Descending
+            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+        } else if (sortBy === 'Nearest First') {
+            const distA = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, a.location);
+            const distB = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, b.location);
+            return distA - distB;
+        }
+        return 0;
+    });
 
     const renderRequestItem = ({ item }) => {
-        const isNew = item.status === 'New';
-        const statusColor = isNew ? '#32CD32' : '#FF6347';
+        let statusColor = '#FF6347'; // Default Red (Rejected)
+        if (item.status === 'New') {
+            statusColor = '#32CD32'; // Green
+        } else if (item.status === 'Partially Accepted') {
+            statusColor = '#FFA500'; // Orange
+        }
 
         return (
             <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
@@ -192,16 +266,16 @@ const MyRequestScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <Text style={[styles.backIcon, { color: theme.colors.text }]}>{'<'}</Text>
+                    <Icon name="arrow-back" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: theme.colors.text }]}>My Requests</Text>
                 <View style={{ width: 24 }} />
             </View>
 
-            {/* Search */}
+            {/* Search and Filter */}
             <View style={styles.searchContainer}>
                 <View style={[styles.searchBar, { backgroundColor: theme.colors.card }]}>
-                    <Text style={styles.searchIcon}>🔍</Text>
+                    <Icon name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
                     <TextInput
                         placeholder="Search Patient..."
                         placeholderTextColor={theme.colors.textSecondary}
@@ -210,6 +284,12 @@ const MyRequestScreen = () => {
                         style={[styles.searchInput, { color: theme.colors.text }]}
                     />
                 </View>
+                <TouchableOpacity
+                    style={[styles.filterButton, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => setModalVisible(true)}
+                >
+                    <Icon name="tune" size={24} color="white" />
+                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -217,7 +297,109 @@ const MyRequestScreen = () => {
                 renderItem={renderRequestItem}
                 keyExtractor={item => item.id}
                 showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
             />
+
+            {/* Filter Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+                    <View style={styles.modalOverlay} />
+                </TouchableWithoutFeedback>
+
+                <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Filter Requests</Text>
+                        <TouchableOpacity onPress={() => setModalVisible(false)}>
+                            <Icon name="close" size={24} color={theme.colors.text} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {/* Sort By Section */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Sort By</Text>
+                        {['Oldest First', 'Newest First', 'Nearest First'].map((option) => (
+                            <TouchableOpacity
+                                key={option}
+                                style={styles.optionRow}
+                                onPress={() => setSortBy(option)}
+                            >
+                                <View style={[
+                                    styles.radioCircle,
+                                    { borderColor: theme.colors.primary },
+                                    sortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                ]}>
+                                    {sortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Filter By Status */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Filter By Status</Text>
+                        {['New', 'Partially Accepted', 'Follow Up'].map((status) => (
+                            <TouchableOpacity
+                                key={status}
+                                style={styles.optionRow}
+                                onPress={() => toggleStatusFilter(status)}
+                            >
+                                <View style={[
+                                    styles.checkbox,
+                                    { borderColor: theme.colors.primary },
+                                    filterStatus.includes(status) && { backgroundColor: theme.colors.primary }
+                                ]}>
+                                    {filterStatus.includes(status) && <Icon name="check" size={14} color="white" />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{status}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        {/* Filter By Distance */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 20 }]}>Distance Radius</Text>
+                        {['Under 2km', 'Under 5km'].map((distance) => (
+                            <TouchableOpacity
+                                key={distance}
+                                style={styles.optionRow}
+                                onPress={() => toggleDistanceFilter(distance)}
+                            >
+                                <View style={[
+                                    styles.checkbox,
+                                    { borderColor: theme.colors.primary },
+                                    filterDistance.includes(distance) && { backgroundColor: theme.colors.primary }
+                                ]}>
+                                    {filterDistance.includes(distance) && <Icon name="check" size={14} color="white" />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{distance}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <View style={styles.modalFooter}>
+                        <TouchableOpacity
+                            style={[styles.footerButton, { borderColor: theme.colors.border, borderWidth: 1 }]}
+                            onPress={() => {
+                                setSortBy('Oldest First');
+                                setFilterStatus([]);
+                                setFilterDistance([]);
+                            }}
+                        >
+                            <Text style={{ color: theme.colors.text }}>Reset</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.footerButton, { backgroundColor: theme.colors.primary }]}
+                            onPress={() => setModalVisible(false)}
+                        >
+                            <Text style={{ color: 'white', fontWeight: 'bold' }}>Apply</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -234,10 +416,6 @@ const styles = StyleSheet.create({
         paddingTop: Platform.OS === 'android' ? 40 : 10,
         paddingBottom: 10,
     },
-    backIcon: {
-        fontSize: 24,
-        fontWeight: 'bold',
-    },
     headerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
@@ -252,7 +430,7 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 12, // More rounded as per screenshot
+        borderRadius: 12,
         paddingHorizontal: 15,
         height: 50,
         elevation: 2, // Shadow for android
@@ -260,10 +438,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
-    },
-    searchIcon: {
-        fontSize: 18,
-        marginRight: 10,
     },
     searchInput: {
         flex: 1,
@@ -345,6 +519,91 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 12,
         fontWeight: 'bold',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalContent: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        maxHeight: '80%',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 10,
+        marginTop: 10,
+    },
+    optionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        marginBottom: 5,
+    },
+    radioCircle: {
+        height: 22,
+        width: 22,
+        borderRadius: 11,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    selectedRb: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+    },
+    checkbox: {
+        height: 22,
+        width: 22,
+        borderRadius: 4,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    optionText: {
+        fontSize: 16,
+    },
+    divider: {
+        height: 1,
+        marginVertical: 15,
+        opacity: 0.2,
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
+    },
+    footerButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginHorizontal: 5,
     },
 });
 

@@ -23,17 +23,32 @@ const TabNavigator = () => {
                 tabBarStyle: {
                     backgroundColor: theme.colors.card,
                     borderTopColor: theme.colors.secondary,
+                    height: 70,
+                    paddingBottom: 10,
+                    paddingTop: 10,
                 },
                 tabBarActiveTintColor: theme.colors.primary,
                 tabBarInactiveTintColor: theme.colors.textSecondary,
+                tabBarShowLabel: false,
                 tabBarIcon: ({ focused, color, size }) => {
                     let iconName = 'help-outline';
                     if (route.name === 'HomeTab') iconName = 'home';
                     else if (route.name === 'Records') iconName = 'description';
-                    else if (route.name === 'Requests') iconName = 'list';
+                    else if (route.name === 'Requests') iconName = 'account-balance-wallet';
                     else if (route.name === 'ProfileTab') iconName = 'person';
 
-                    return <Icon name={iconName} size={size} color={color} />;
+                    return (
+                        <View style={{
+                            backgroundColor: focused ? 'black' : 'transparent',
+                            borderRadius: 25,
+                            height: 50,
+                            width: 50,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                        }}>
+                            <Icon name={iconName} size={24} color={focused ? 'white' : color} />
+                        </View>
+                    );
                 }
             })}
         >

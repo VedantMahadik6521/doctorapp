@@ -11,6 +11,9 @@ import {
     SafeAreaView,
     Platform,
     ActivityIndicator,
+    Modal,
+    ScrollView,
+    TouchableWithoutFeedback
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
@@ -26,6 +29,13 @@ const MedicalRecordsScreen = () => {
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Filter States
+    const [modalVisible, setModalVisible] = useState(false);
+    const [sortBy, setSortBy] = useState('Last recently Visited');
+    const [filterTimeFrame, setFilterTimeFrame] = useState(null); // 'Last 30 Days', 'Last 6 Months', 'Custom'
+    const [filterCategory, setFilterCategory] = useState([]);
+    const [filterDemographics, setFilterDemographics] = useState([]);
+
     useEffect(() => {
         const user = auth().currentUser;
         if (!user) {
@@ -35,7 +45,7 @@ const MedicalRecordsScreen = () => {
 
         const unsubscribe = firestore()
             .collection('doctors')
-            .doc('100008') // Using hardcoded ID to match MyRequestScreen
+            .doc('100008')
             .collection('records')
             .orderBy('completedAt', 'desc')
             .onSnapshot(
@@ -56,9 +66,97 @@ const MedicalRecordsScreen = () => {
         return unsubscribe;
     }, []);
 
-    const filteredRecords = records.filter(item =>
-        item.reportPrescription?.patientName?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Helper for Age Category
+    const getAgeCategory = (age) => {
+        if (!age) return null;
+        const ageNum = parseInt(age);
+        if (ageNum < 18) return 'Pediatric';
+        if (ageNum >= 18 && ageNum < 60) return 'Adult';
+        if (ageNum >= 60) return 'Geriatric';
+        return null;
+    };
+
+    // Helper for Time Frame
+    const checkTimeFrame = (timestamp, frame) => {
+        if (!timestamp) return false;
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (frame === 'Last 30 Days') return diffDays <= 30;
+        if (frame === 'Last 6 Months') return diffDays <= 180;
+        // Custom Date Range would need more UI, omitting for simple loop unless requested
+        return true;
+    };
+
+    // Frequency Map for Sorting
+    const getPatientFrequency = () => {
+        const freq = {};
+        records.forEach(r => {
+            const name = r.reportPrescription?.patientName || 'Unknown';
+            freq[name] = (freq[name] || 0) + 1;
+        });
+        return freq;
+    };
+
+    const toggleFilter = (state, setState, value) => {
+        if (state.includes(value)) {
+            setState(state.filter(item => item !== value));
+        } else {
+            setState([...state, value]);
+        }
+    };
+
+    const filteredRecords = records.filter(item => {
+        // Search
+        const name = item.reportPrescription?.patientName?.toLowerCase() || '';
+        if (searchQuery && !name.includes(searchQuery.toLowerCase())) {
+            return false;
+        }
+
+        // Time Frame
+        if (filterTimeFrame && !checkTimeFrame(item.completedAt, filterTimeFrame)) {
+            return false;
+        }
+
+        // Category
+        if (filterCategory.length > 0) {
+            // Assuming item.category or item.patientCategory exists
+            const cat = item.category || item.patientCategory || '';
+            if (!filterCategory.includes(cat)) return false;
+        }
+
+        // Demographics
+        if (filterDemographics.length > 0) {
+            const age = item.reportPrescription?.age || item.reportPrescription?.patientAge || item.patientAge;
+            const cat = getAgeCategory(age);
+            if (!filterDemographics.includes(cat)) return false;
+        }
+
+        return true;
+    }).sort((a, b) => {
+        const nameA = a.reportPrescription?.patientName || '';
+        const nameB = b.reportPrescription?.patientName || '';
+
+        if (sortBy === 'Last recently Visited') {
+            const timeA = a.completedAt?.seconds || 0;
+            const timeB = b.completedAt?.seconds || 0;
+            return timeB - timeA;
+        } else if (sortBy === 'Alphabetical') {
+            // Logic: Compare names. If names are same, what next? User said:
+            // "abhishek aher and abhishek bakade then abhishek aher first"
+            // This is just standard string comparison.
+            return nameA.localeCompare(nameB);
+        } else if (sortBy === 'Frequency') {
+            const freq = getPatientFrequency();
+            const countA = freq[nameA] || 0;
+            const countB = freq[nameB] || 0;
+            if (countA !== countB) return countB - countA; // Higher freq first
+            return nameA.localeCompare(nameB); // Fallback to name
+        }
+        return 0;
+    });
 
     const renderRecordItem = ({ item }) => {
         const { reportPrescription, healthIssue, patientImage } = item;
@@ -79,17 +177,17 @@ const MedicalRecordsScreen = () => {
                             <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>Health Issue: </Text>
                             {healthIssue || 'General Check-up'}
                         </Text>
-                        {/* Subtitle if needed, e.g. Symptoms or Date */}
                         {reportPrescription?.diagnosis && (
                             <Text style={[styles.subText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                                 {reportPrescription.diagnosis}
                             </Text>
                         )}
+                        {/* Debugging visual for filters if needed, e.g. Age */}
+                        {/* <Text style={{fontSize: 10, color: 'gray'}}>Age: {reportPrescription?.patientAge}</Text> */}
                     </View>
                 </View>
 
                 <View style={styles.cardFooter}>
-                    {/* Placeholder for "More Details" if we have a details screen for historical records */}
                     <TouchableOpacity
                         style={[styles.detailsButton, { backgroundColor: '#9370DB' }]}
                         onPress={() => {
@@ -119,7 +217,10 @@ const MedicalRecordsScreen = () => {
                     <Icon name="arrow-back" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Medical Records</Text>
-                <TouchableOpacity style={styles.filterButton}>
+                <TouchableOpacity
+                    style={[styles.filterButton, { backgroundColor: theme.colors.card }]}
+                    onPress={() => setModalVisible(true)}
+                >
                     <Icon name="tune" size={20} color={theme.colors.text} />
                 </TouchableOpacity>
             </View>
@@ -150,6 +251,133 @@ const MedicalRecordsScreen = () => {
                     </View>
                 }
             />
+
+            {/* Filter Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+                    <View style={styles.modalOverlay} />
+                </TouchableWithoutFeedback>
+
+                <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+                    <View style={styles.modalHeader}>
+                        <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Filter Records</Text>
+                        <TouchableOpacity onPress={() => setModalVisible(false)}>
+                            <Icon name="close" size={24} color={theme.colors.text} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {/* Sort By */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Sort By</Text>
+                        {['Last recently Visited', 'Alphabetical', 'Frequency'].map((option) => (
+                            <TouchableOpacity
+                                key={option}
+                                style={styles.optionRow}
+                                onPress={() => setSortBy(option)}
+                            >
+                                <View style={[
+                                    styles.radioCircle,
+                                    { borderColor: theme.colors.primary },
+                                    sortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                ]}>
+                                    {sortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Filter By Time Frame */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Time Frame</Text>
+                        {/* Radio buttons for Time Frame since date ranges usually mutually exclusive or single select */}
+                        {['Last 30 Days', 'Last 6 Months', 'Custom Date Range'].map((option) => (
+                            <TouchableOpacity
+                                key={option}
+                                style={styles.optionRow}
+                                onPress={() => setFilterTimeFrame(filterTimeFrame === option ? null : option)}
+                            >
+                                <View style={[
+                                    styles.radioCircle,
+                                    { borderColor: theme.colors.primary },
+                                    filterTimeFrame === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                ]}>
+                                    {filterTimeFrame === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Filter By Category */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Patient Category</Text>
+                        {['Chronic', 'Acute'].map((cat) => (
+                            <TouchableOpacity
+                                key={cat}
+                                style={styles.optionRow}
+                                onPress={() => toggleFilter(filterCategory, setFilterCategory, cat)}
+                            >
+                                <View style={[
+                                    styles.checkbox,
+                                    { borderColor: theme.colors.primary },
+                                    filterCategory.includes(cat) && { backgroundColor: theme.colors.primary }
+                                ]}>
+                                    {filterCategory.includes(cat) && <Icon name="check" size={14} color="white" />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{cat}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Filter By Demographics */}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Demographics</Text>
+                        {['Pediatric', 'Adult', 'Geriatric'].map((demo) => (
+                            <TouchableOpacity
+                                key={demo}
+                                style={styles.optionRow}
+                                onPress={() => toggleFilter(filterDemographics, setFilterDemographics, demo)}
+                            >
+                                <View style={[
+                                    styles.checkbox,
+                                    { borderColor: theme.colors.primary },
+                                    filterDemographics.includes(demo) && { backgroundColor: theme.colors.primary }
+                                ]}>
+                                    {filterDemographics.includes(demo) && <Icon name="check" size={14} color="white" />}
+                                </View>
+                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{demo}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                    </ScrollView>
+
+                    <View style={styles.modalFooter}>
+                        <TouchableOpacity
+                            style={[styles.footerButton, { borderColor: theme.colors.border, borderWidth: 1 }]}
+                            onPress={() => {
+                                setSortBy('Last recently Visited');
+                                setFilterTimeFrame(null);
+                                setFilterCategory([]);
+                                setFilterDemographics([]);
+                            }}
+                        >
+                            <Text style={{ color: theme.colors.text }}>Reset</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.footerButton, { backgroundColor: theme.colors.primary }]}
+                            onPress={() => setModalVisible(false)}
+                        >
+                            <Text style={{ color: 'white', fontWeight: 'bold' }}>Apply</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -175,9 +403,12 @@ const styles = StyleSheet.create({
     },
     filterButton: {
         padding: 10,
-        backgroundColor: '#fff',
         borderRadius: 10,
         elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
     searchContainer: {
         paddingHorizontal: 20,
@@ -217,7 +448,7 @@ const styles = StyleSheet.create({
         height: 60,
         borderRadius: 30,
         marginRight: 15,
-        backgroundColor: '#ccc', // Placeholder color
+        backgroundColor: '#ccc',
     },
     cardContent: {
         flex: 1,
@@ -254,7 +485,92 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 50,
-    }
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalContent: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        maxHeight: '80%',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 10,
+        marginTop: 10,
+    },
+    optionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        marginBottom: 5,
+    },
+    radioCircle: {
+        height: 22,
+        width: 22,
+        borderRadius: 11,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    selectedRb: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+    },
+    checkbox: {
+        height: 22,
+        width: 22,
+        borderRadius: 4,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    optionText: {
+        fontSize: 16,
+    },
+    divider: {
+        height: 1,
+        marginVertical: 15,
+        opacity: 0.2,
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
+    },
+    footerButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginHorizontal: 5,
+    },
 });
 
 export default MedicalRecordsScreen;

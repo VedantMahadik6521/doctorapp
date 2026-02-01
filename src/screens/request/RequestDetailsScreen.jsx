@@ -327,7 +327,15 @@ const RequestDetailsScreen = () => {
                         </TouchableOpacity>
                     </>
                 ) : (
-                    <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={handleCancelVisit}>
+                    <TouchableOpacity
+                        style={[
+                            styles.actionButton,
+                            styles.cancelButton,
+                            !isPaymentReceived && { backgroundColor: '#B0B0B0', opacity: 0.6 }
+                        ]}
+                        onPress={handleCancelVisit}
+                        disabled={!isPaymentReceived}
+                    >
                         <Text style={styles.buttonText}>Cancel Visit</Text>
                     </TouchableOpacity>
                 )}

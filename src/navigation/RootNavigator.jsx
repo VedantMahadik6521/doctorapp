@@ -18,6 +18,7 @@ import AllTestimonialsScreen from '../screens/home/AllTestimonialsScreen';
 import NotificationScreen from '../screens/home/NotificationScreen';
 import RequestDetailsScreen from '../screens/request/RequestDetailsScreen';
 import RefundScreen from '../screens/request/RefundScreen';
+import PaymentMethodScreen from '../screens/request/PaymentMethodScreen';
 import PrescriptionScreen from '../screens/request/PrescriptionScreen';
 
 /* Entry Gate */
@@ -64,6 +65,7 @@ const RootNavigator = () => {
       {/* Request Details */}
       <Stack.Screen name="RequestDetails" component={RequestDetailsScreen} />
       <Stack.Screen name="RefundScreen" component={RefundScreen} />
+      <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
       <Stack.Screen name="PrescriptionScreen" component={PrescriptionScreen} />
       <Stack.Screen name="PatientDetails" component={require('../screens/records/PatientDetailsScreen').default} />
       {/* Keeping legacy Home temporarily if needed, but Dashboard is primary now */}

@@ -5,6 +5,8 @@ import TabNavigator from './TabNavigator';
 import MyRequestScreen from '../screens/request/MyRequestScreen';
 import HelpCenterScreen from '../screens/help/HelpCenterScreen';
 import SettingsAndPrivacyScreen from '../screens/settings/SettingsAndPrivacyScreen'; // Imported
+import FeedbackScreen from '../screens/feedback/FeedbackScreen';
+
 import { View, Text } from 'react-native';
 
 const Drawer = createDrawerNavigator();
@@ -82,6 +84,12 @@ const DrawerNavigator = () => {
             <Drawer.Screen name="Help" component={HelpCenterScreen} options={{ title: 'Help & Support' }} />
             <Drawer.Screen name="Settings" component={SettingsAndPrivacyScreen} options={{ title: 'Settings & Privacy' }} />
             <Drawer.Screen name="Logout" component={LogoutScreen} />
+            <Drawer.Screen
+  name="Feedback"
+  component={FeedbackScreen}
+  options={{ title: 'Feedback' }}
+/>
+
         </Drawer.Navigator>
     );
 };

@@ -270,6 +270,19 @@ const HelpCenterScreen = () => {
                         {showVisitDropdown && (
                             <View style={styles.dropdownList}>
                                 <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                    {/* Other Complaint Option */}
+                                    <TouchableOpacity
+                                        style={[styles.dropdownItem]}
+                                        onPress={() => {
+                                            setSelectedVisit({ id: 'other', patientName: 'Other Complaint', healthIssue: 'General Issue' });
+                                            setShowVisitDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={[styles.dropdownItemText, { fontWeight: 'bold', color: theme.colors.primary }]}>
+                                            Other Complaint
+                                        </Text>
+                                    </TouchableOpacity>
+
                                     {visits.length > 0 ? (
                                         visits.map((visit) => (
                                             <TouchableOpacity
