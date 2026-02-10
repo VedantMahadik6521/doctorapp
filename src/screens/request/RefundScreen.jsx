@@ -16,10 +16,10 @@ const RefundScreen = () => {
     const { theme } = useTheme();
     const navigation = useNavigation();
     const route = useRoute();
-    const { amount = '500' } = route.params || {};
+    const { amount = '0', upiId: passedUpiId } = route.params || {};
 
     const [reason, setReason] = useState('');
-    const [upiId, setUpiId] = useState('');
+    const [upiId, setUpiId] = useState(passedUpiId || '');
 
     const handlePay = () => {
         if (!reason.trim()) {
@@ -75,16 +75,20 @@ const RefundScreen = () => {
                     </Text>
                 </View>
 
-                {/* UPI ID Input */}
-                <Text style={[styles.label, { color: theme.colors.text }]}>Add UPI ID</Text>
+                {/* UPI ID Input or Display */}
+                <Text style={[styles.label, { color: theme.colors.text }]}>{passedUpiId ? 'Refund To UPI ID' : 'Add UPI ID'}</Text>
                 <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-                    <TextInput
-                        style={[styles.input, { color: theme.colors.text }]}
-                        placeholder="Enter UPI ID"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={upiId}
-                        onChangeText={setUpiId}
-                    />
+                    {passedUpiId ? (
+                        <Text style={{ color: theme.colors.text, fontSize: 16, paddingVertical: 12 }}>{passedUpiId}</Text>
+                    ) : (
+                        <TextInput
+                            style={[styles.input, { color: theme.colors.text }]}
+                            placeholder="Enter UPI ID"
+                            placeholderTextColor={theme.colors.textSecondary}
+                            value={upiId}
+                            onChangeText={setUpiId}
+                        />
+                    )}
                 </View>
 
                 {/* Spacer */}

@@ -60,6 +60,7 @@ const HelpCenterScreen = () => {
 
     // Ticket State
     const [modalVisible, setModalVisible] = useState(false);
+    const [tickets, setTickets] = useState([]);
     const [visits, setVisits] = useState([]);
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [issueTitle, setIssueTitle] = useState('');
@@ -67,17 +68,46 @@ const HelpCenterScreen = () => {
     const [submitting, setSubmitting] = useState(false);
     const [showVisitDropdown, setShowVisitDropdown] = useState(false);
 
+    // Details Modal State
+    const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+    const [selectedTicket, setSelectedTicket] = useState(null);
+
+    useEffect(() => {
+        const user = auth().currentUser;
+        if (!user) return;
+
+        // Fetch Tickets Real-time
+        const unsubscribeTickets = firestore()
+            .collection('doctors')
+            .doc(user.uid)
+            .collection('Ticket')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(snapshot => {
+                const fetchedTickets = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setTickets(fetchedTickets);
+            }, error => {
+                console.error("Error fetching tickets:", error);
+            });
+
+        return () => unsubscribeTickets();
+    }, []);
+
     useEffect(() => {
         // Fetch visits (records) for the dropdown
         const fetchVisits = async () => {
+            // ... existing fetch visits logic is fine inside useEffect or separate
+            // Optimizing to only fetch when modal opens is fine, keeping existing logic attached to modalVisible
             try {
                 const user = auth().currentUser;
-                if (!user) return; // Ensure user is logged in
+                if (!user) return;
 
                 // Fetching from 'doctors/{uid}/records' subcollection
                 const snapshot = await firestore()
                     .collection('doctors')
-                    .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                    .doc(user.uid)
                     .collection('records')
                     .orderBy('completedAt', 'desc')
                     .limit(10)
@@ -85,7 +115,6 @@ const HelpCenterScreen = () => {
 
                 const visitsData = snapshot.docs.map(doc => {
                     const data = doc.data();
-                    // Safely access patientName from nested reportPrescription
                     const patientName = data.reportPrescription?.patientName || 'Unknown Patient';
                     return {
                         id: doc.id,
@@ -142,7 +171,7 @@ const HelpCenterScreen = () => {
 
             await firestore()
                 .collection('doctors')
-                .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                .doc(currentUser.uid)
                 .collection('Ticket')
                 .add(ticketData);
 
@@ -160,6 +189,42 @@ const HelpCenterScreen = () => {
         }
     };
 
+    const getStatusColor = (status) => {
+        switch (status?.toLowerCase()) {
+            case 'open': return '#4CAF50'; // Green
+            case 'closed': return '#9E9E9E'; // Gray
+            case 'in progress': return '#FFA000'; // Amber
+            default: return theme.colors.primary;
+        }
+    };
+
+    const renderTicketItem = (ticket) => (
+        <TouchableOpacity
+            key={ticket.id}
+            style={styles.ticketItem}
+            onPress={() => {
+                setSelectedTicket(ticket);
+                setDetailsModalVisible(true);
+            }}
+        >
+            <View style={styles.ticketHeaderRow}>
+                <Text style={[styles.ticketId, { color: theme.colors.text }]}>
+                    {ticket.ticketId || ticket['ticket id'] || 'No ID'}
+                </Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(ticket.status) + '20' }]}>
+                    <Text style={[styles.statusText, { color: getStatusColor(ticket.status) }]}>
+                        {ticket.status || 'Open'}
+                    </Text>
+                </View>
+            </View>
+            <Text style={[styles.ticketTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                {ticket.issueTitle}
+            </Text>
+            <Text style={styles.ticketDate}>
+                {ticket.createdAt?.toDate ? ticket.createdAt.toDate().toLocaleDateString() : 'Just now'}
+            </Text>
+        </TouchableOpacity>
+    );
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -181,27 +246,41 @@ const HelpCenterScreen = () => {
 
                 {/* Previous Tickets Section */}
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Previous Tickets</Text>
-                <View style={styles.ticketCard}>
-                    <Icon name="local-offer" size={40} color="#AAA" style={{ marginBottom: 10 }} />
-                    <Text style={styles.noTicketText}>No tickets yet</Text>
-                    <Text style={styles.ticketSubText}>Create a ticket if you need help with any visit</Text>
 
-                    <TouchableOpacity style={styles.createButton} onPress={() => setModalVisible(true)}>
-                        <Text style={styles.createButtonText}>Create New Ticket</Text>
-                    </TouchableOpacity>
-                </View>
+                {tickets.length > 0 ? (
+                    <View style={{ marginBottom: 20 }}>
+                        <View style={{ height: 320, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 5 }}>
+                            <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
+                                {tickets.map(renderTicketItem)}
+                            </ScrollView>
+                        </View>
+                        <TouchableOpacity style={[styles.createButton, { marginTop: 15 }]} onPress={() => setModalVisible(true)}>
+                            <Text style={styles.createButtonText}>Create New Ticket</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.ticketCard}>
+                        <Icon name="local-offer" size={40} color="#AAA" style={{ marginBottom: 10 }} />
+                        <Text style={styles.noTicketText}>No tickets yet</Text>
+                        <Text style={styles.ticketSubText}>Create a ticket if you need help with any visit</Text>
+
+                        <TouchableOpacity style={styles.createButton} onPress={() => setModalVisible(true)}>
+                            <Text style={styles.createButtonText}>Create New Ticket</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {/* Contact Info */}
                 <View style={styles.contactContainer}>
                     <View style={styles.contactRow}>
-                        <Icon name="call" size={20} color="#32CD32" style={{ marginRight: 15 }} />
+                        <Icon name="call" size={20} color="#7B61FF" style={{ marginRight: 15 }} />
                         <View>
                             <Text style={styles.contactLabel}>Call Us:</Text>
                             <Text style={[styles.contactValue, { color: theme.colors.text }]}>+91 1334 567 890</Text>
                         </View>
                     </View>
                     <View style={styles.contactRow}>
-                        <Icon name="email" size={20} color="#32CD32" style={{ marginRight: 15 }} />
+                        <Icon name="email" size={20} color="#7B61FF" style={{ marginRight: 15 }} />
                         <View>
                             <Text style={styles.contactLabel}>Email Us:</Text>
                             <Text style={[styles.contactValue, { color: theme.colors.text }]}>support@doctor4home.com</Text>
@@ -339,11 +418,11 @@ const HelpCenterScreen = () => {
 
                         <View style={{ marginTop: 20 }}>
                             <View style={styles.contactRowSmall}>
-                                <Icon name="call" size={14} color="#32CD32" style={{ marginRight: 8 }} />
+                                <Icon name="call" size={14} color="#7B61FF" style={{ marginRight: 8 }} />
                                 <Text style={styles.smallContactText}>Call Us: +91 1334 567 890</Text>
                             </View>
                             <View style={styles.contactRowSmall}>
-                                <Icon name="email" size={14} color="#32CD32" style={{ marginRight: 8 }} />
+                                <Icon name="email" size={14} color="#7B61FF" style={{ marginRight: 8 }} />
                                 <Text style={styles.smallContactText}>Email Us: support@doctor4home.com</Text>
                             </View>
                         </View>
@@ -364,6 +443,70 @@ const HelpCenterScreen = () => {
                             <Text style={styles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
 
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Ticket Details Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={detailsModalVisible}
+                onRequestClose={() => setDetailsModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Ticket Details</Text>
+                            <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
+                                <Icon name="close" size={24} color="#333" />
+                            </TouchableOpacity>
+                        </View>
+                        {selectedTicket && (
+                            <ScrollView showsVerticalScrollIndicator={false}>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Ticket ID:</Text>
+                                    <Text style={styles.detailValue}>{selectedTicket.ticketId || selectedTicket['ticket id']}</Text>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Status:</Text>
+                                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedTicket.status) + '20' }]}>
+                                        <Text style={[styles.statusText, { color: getStatusColor(selectedTicket.status) }]}>
+                                            {selectedTicket.status}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Date:</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedTicket.createdAt?.toDate ? selectedTicket.createdAt.toDate().toLocaleString() : 'N/A'}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.detailSection}>
+                                    <Text style={styles.detailLabel}>Issue Title:</Text>
+                                    <Text style={styles.detailValueLarge}>{selectedTicket.issueTitle}</Text>
+                                </View>
+
+                                <View style={styles.detailSection}>
+                                    <Text style={styles.detailLabel}>Description:</Text>
+                                    <Text style={styles.detailValueLarge}>{selectedTicket.DescribeIssue}</Text>
+                                </View>
+
+                                {selectedTicket.adminReply && (
+                                    <View style={[styles.detailSection, { backgroundColor: '#f9f9f9', padding: 10, borderRadius: 8, marginTop: 10 }]}>
+                                        <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>Admin Reply:</Text>
+                                        <Text style={styles.detailValueLarge}>{selectedTicket.adminReply}</Text>
+                                    </View>
+                                )}
+
+                            </ScrollView>
+                        )}
+                        <TouchableOpacity style={[styles.cancelButton, { marginTop: 20 }]} onPress={() => setDetailsModalVisible(false)}>
+                            <Text style={styles.cancelButtonText}>Close</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -450,7 +593,7 @@ const styles = StyleSheet.create({
     contactIcon: {
         fontSize: 20,
         marginRight: 15,
-        color: '#32CD32', // Green icon
+        color: '#7B61FF', // Purple icon
     },
     contactLabel: {
         fontSize: 12,
@@ -501,6 +644,48 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#666',
         lineHeight: 20,
+    },
+
+    // Ticket List Styles
+    ticketItem: {
+        backgroundColor: '#FFF',
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 10,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    ticketHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    ticketId: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 12,
+    },
+    statusText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    ticketTitle: {
+        fontSize: 16,
+        fontWeight: '500',
+        marginBottom: 5,
+    },
+    ticketDate: {
+        fontSize: 12,
+        color: '#999',
     },
 
     // Modal Styles
@@ -578,7 +763,7 @@ const styles = StyleSheet.create({
         marginRight: 15,
     },
     createModalButton: {
-        backgroundColor: '#00C853',
+        backgroundColor: '#7B61FF',
         paddingVertical: 15,
         borderRadius: 8,
         alignItems: 'center',
@@ -606,7 +791,34 @@ const styles = StyleSheet.create({
     smallContactText: {
         color: '#666',
         fontSize: 12
-    }
+    },
+
+    // Detail Modal Specifics
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 15,
+        alignItems: 'center',
+    },
+    detailLabel: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#666',
+    },
+    detailValue: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '600',
+    },
+    detailSection: {
+        marginBottom: 15,
+    },
+    detailValueLarge: {
+        fontSize: 15,
+        color: '#333',
+        lineHeight: 22,
+        marginTop: 5,
+    },
 });
 
 export default HelpCenterScreen;

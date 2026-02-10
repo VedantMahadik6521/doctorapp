@@ -83,12 +83,12 @@ const DrawerNavigator = () => {
 
             <Drawer.Screen name="Help" component={HelpCenterScreen} options={{ title: 'Help & Support' }} />
             <Drawer.Screen name="Settings" component={SettingsAndPrivacyScreen} options={{ title: 'Settings & Privacy' }} />
-            <Drawer.Screen name="Logout" component={LogoutScreen} />
             <Drawer.Screen
-  name="Feedback"
-  component={FeedbackScreen}
-  options={{ title: 'Feedback' }}
-/>
+                name="Feedback"
+                component={FeedbackScreen}
+                options={{ title: 'Feedback' }}
+            />
+            <Drawer.Screen name="Logout" component={LogoutScreen} />
 
         </Drawer.Navigator>
     );

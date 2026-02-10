@@ -8,10 +8,17 @@ import {
     SafeAreaView,
     ScrollView,
     Dimensions,
+    Linking,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
+import storage from '@react-native-firebase/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +29,65 @@ const PatientDetailsScreen = () => {
     const { record } = route.params || {};
 
     const [activeTab, setActiveTab] = useState('Lab Report');
+    const [labReports, setLabReports] = useState([]);
+    const [loadingReports, setLoadingReports] = useState(false);
+    const [openingReportId, setOpeningReportId] = useState(null);
+
+    React.useEffect(() => {
+        if (activeTab === 'Lab Report') {
+            const user = auth().currentUser;
+            if (!user || !record?.id) return;
+
+            setLoadingReports(true);
+            const unsubscribe = firestore()
+                .collection('doctors')
+                .doc(user.uid)
+                .collection('records')
+                .doc(record.id)
+                .collection('labRecords')
+                .onSnapshot(snapshot => {
+                    if (snapshot) {
+                        const reports = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setLabReports(reports);
+                    }
+                    setLoadingReports(false);
+                }, err => {
+                    console.log('Error fetching lab reports', err);
+                    setLoadingReports(false);
+                });
+            return () => unsubscribe();
+        }
+    }, [activeTab, record]);
+
+    const handleOpenReport = async (report) => {
+        if (!report.storageLocation) {
+            Alert.alert('Error', 'No document URL available.');
+            return;
+        }
+
+        try {
+            setOpeningReportId(report.id);
+            let url = report.storageLocation;
+
+            // Convert gs:// bucket URL to downloadable https URL
+            if (url.startsWith('gs://')) {
+                url = await storage().refFromURL(url).getDownloadURL();
+            }
+
+            navigation.navigate('PDFViewer', {
+                url: url,
+                title: report.reportName || 'Lab Report'
+            });
+        } catch (error) {
+            console.error('Error getting download URL:', error);
+            Alert.alert('Error', 'Could not open report. Please try again.');
+        } finally {
+            setOpeningReportId(null);
+        }
+    };
 
     const renderHeader = () => {
         const { reportPrescription, healthIssue, patientImage } = record || {};
@@ -97,16 +163,60 @@ const PatientDetailsScreen = () => {
         return (
             <View style={styles.contentSection}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Lab Reports</Text>
-                <View style={[styles.card, { backgroundColor: theme.colors.card, alignItems: 'center', padding: 40 }]}>
-                    <Text style={{ color: theme.colors.textSecondary, marginBottom: 20 }}>No Lab Reports</Text>
-                    {/* Placeholder for when we have files provided in the data struct later
-                     <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
-                        {[1,2,3,4,5].map(i => (
-                             <Icon key={i} name="file-text" size={40} color={theme.colors.text} style={{margin: 10}} />
-                        ))}
-                     </View>
-                     */}
-                </View>
+
+                {labReports.length > 0 ? (
+                    labReports.map((report) => (
+                        <View key={report.id} style={[styles.card, { backgroundColor: theme.colors.card, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                <View style={{
+                                    width: 50,
+                                    height: 50,
+                                    borderRadius: 10,
+                                    backgroundColor: theme.colors.primary + '20', // Light opacity primary
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    marginRight: 15
+                                }}>
+                                    <Icon name="insert-drive-file" size={28} color={theme.colors.primary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 16 }}>{report.reportName || 'Unnamed Report'}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>ID: {report.labReportId || report.id}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{report.date || 'No Date'}</Text>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity
+                                style={{
+                                    paddingVertical: 8,
+                                    paddingHorizontal: 15,
+                                    borderRadius: 8,
+                                    backgroundColor: theme.colors.background,
+                                    borderWidth: 1,
+                                    borderColor: theme.colors.border,
+                                    minWidth: 70,
+                                    alignItems: 'center'
+                                }}
+                                onPress={() => handleOpenReport(report)}
+                                disabled={openingReportId === report.id}
+                            >
+                                {openingReportId === report.id ? (
+                                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                                ) : (
+                                    <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 12 }}>View</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    ))
+                ) : (
+                    <View style={[styles.card, { backgroundColor: theme.colors.card, alignItems: 'center', padding: 40 }]}>
+                        {loadingReports ? (
+                            <Text style={{ color: theme.colors.textSecondary }}>Loading...</Text>
+                        ) : (
+                            <Text style={{ color: theme.colors.textSecondary, marginBottom: 20 }}>No Lab Reports Found</Text>
+                        )}
+                    </View>
+                )}
             </View>
         );
     };

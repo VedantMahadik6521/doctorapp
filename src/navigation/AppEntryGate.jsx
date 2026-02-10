@@ -19,8 +19,9 @@ const AppEntryGate = ({ navigation }) => {
 
         const docSnap = await docRef.get();
 
-        // No Firestore profile yet
-        if (!docSnap.exists) {
+        // No Firestore profile yet OR valid profile data missing (e.g. name)
+        // This ensures "ghost" users with empty docs still go to Register
+        if (!docSnap.exists || !docSnap.data()?.name) {
           navigation.replace('Register');
           return;
         }
@@ -28,30 +29,17 @@ const AppEntryGate = ({ navigation }) => {
         // Retrieve data or default to empty object
         const data = docSnap.data() || {};
 
-        // If data is empty but doc exists, we assume it's a valid legacy/glitched user 
-        // who should be allowed in as per user request.
-        // We default undefined flags to TRUE for this specific fix to unblock the user.
-
-        // RELAXED LOGIC: If 'name' exists, we assume they passed Registration and are likely valid.
-        // We override false flags to UNBLOCK the user and get them to HomeScreen2 as requested.
         let profileCompleted = data.profileCompleted;
         let verified = data.verified;
         let isOnline = data.isOnline;
 
-        if (data.name) {
-          // Force ALL flags to true if name exists, to ensure direct access to Dashboard (HomeScreen2)
-          if (!profileCompleted) profileCompleted = true;
-          if (!verified) verified = true;
-          // Also force online to skip VerifiedWelcomeScreen if they want "Directly Home2"
-          // Use with caution, but user requested "Directly to HomeScreen2"
-          if (!isOnline) isOnline = true;
-        } else {
-          // No name? Then default to standard checks or true if undefined
-          if (profileCompleted === undefined) profileCompleted = true;
-          if (verified === undefined) verified = true;
-        }
+        // Default undefined flags to false for safety, or handle legacy data if needed.
+        // If they are undefined, it usually means the profile isn't fully set up.
+        if (profileCompleted === undefined) profileCompleted = false;
+        if (verified === undefined) verified = false;
+        if (isOnline === undefined) isOnline = false;
 
-        if (isOnline === undefined) isOnline = true;
+
 
         // Flow decision
         if (!profileCompleted) {

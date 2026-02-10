@@ -39,7 +39,7 @@ const AnalyticsScreen = () => {
                 // 1. Pending Requests (from 'doctors/{uid}/patients' subcollection)
                 const pendingSnapshot = await firestore()
                     .collection('doctors')
-                    .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                    .doc(user.uid)
                     .collection('patients')
                     .get();
                 const pendingCount = pendingSnapshot.size;
@@ -47,7 +47,7 @@ const AnalyticsScreen = () => {
                 // 2. Completed Visits (from 'doctors/{uid}/records' subcollection)
                 const completedSnapshot = await firestore()
                     .collection('doctors')
-                    .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                    .doc(user.uid)
                     .collection('records')
                     .get();
 
@@ -92,10 +92,7 @@ const AnalyticsScreen = () => {
                 <Text style={styles.cardTitle}>{title}</Text>
             </View>
             <View style={styles.cardRight}>
-                <View style={styles.timeLabelContainer}>
-                    <Text style={styles.timeLabel}>{timeLabel}</Text>
-                    <Icon name="keyboard-arrow-down" size={12} color="#666" style={{ marginLeft: 4 }} />
-                </View>
+
                 <Text style={styles.cardCount}>{count}</Text>
             </View>
         </View>

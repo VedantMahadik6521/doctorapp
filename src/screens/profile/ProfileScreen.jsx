@@ -1,4 +1,5 @@
 //heyy broo
+//ffuvfyuyygyujgiygyigyigiuio
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -61,6 +62,8 @@ const ProfileScreen = () => {
         const user = auth().currentUser;
         if (!user) return;
 
+
+        
         const docRef = firestore().collection('doctors').doc(user.uid);
         const docSnap = await docRef.get();
 

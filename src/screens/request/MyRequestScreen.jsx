@@ -29,12 +29,36 @@ const MyRequestScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
+    // Dynamic Doctor Location State (Initialized with Fallback: Orabelle Bhoomi Infracon)
+    const [currentDoctorLocation, setCurrentDoctorLocation] = useState({
+        latitude: 18.6433,
+        longitude: 73.7366,
+    });
 
     // Filter States
     const [modalVisible, setModalVisible] = useState(false);
     const [sortBy, setSortBy] = useState('Oldest First');
     const [filterStatus, setFilterStatus] = useState([]);
     const [filterDistance, setFilterDistance] = useState([]);
+
+    // Temporary Filter States (for Modal)
+    const [tempSortBy, setTempSortBy] = useState('Oldest First');
+    const [tempFilterStatus, setTempFilterStatus] = useState([]);
+    const [tempFilterDistance, setTempFilterDistance] = useState([]);
+
+    const openFilterModal = () => {
+        setTempSortBy(sortBy);
+        setTempFilterStatus([...filterStatus]);
+        setTempFilterDistance([...filterDistance]);
+        setModalVisible(true);
+    };
+
+    const applyFilters = () => {
+        setSortBy(tempSortBy);
+        setFilterStatus(tempFilterStatus);
+        setFilterDistance(tempFilterDistance);
+        setModalVisible(false);
+    };
 
     // 🔥 useEffect AFTER hooks
     useEffect(() => {
@@ -44,10 +68,10 @@ const MyRequestScreen = () => {
             return;
         }
 
-        // Change: Use the hardcoded ID '100008' to match your migrated data
+        // Change: Use the dynamic user.uid
         const unsubscribe = firestore()
             .collection('doctors')
-            .doc('100008') // <--- Changed from user.uid to '100008'
+            .doc(user.uid)
             .collection('patients')
             .orderBy('createdAt', 'desc')
             .onSnapshot(
@@ -65,13 +89,34 @@ const MyRequestScreen = () => {
                 }
             );
 
+        // Fetch Doctor Location
+        const fetchDoctorLocation = async () => {
+            try {
+                const docSnap = await firestore()
+                    .collection('doctors')
+                    .doc(user.uid)
+                    .get();
+
+                if (docSnap.exists) {
+                    const docData = docSnap.data();
+                    if (docData?.location && docData.location.latitude && docData.location.longitude) {
+                        setCurrentDoctorLocation({
+                            latitude: docData.location.latitude,
+                            longitude: docData.location.longitude
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching doctor location:", err);
+                // Fallback remains as initialized
+            }
+        };
+
+        fetchDoctorLocation();
+
         return unsubscribe;
     }, []);
-    // Fixed Doctor Location (Ravet)
-    const doctorLocation = {
-        latitude: 18.6433,
-        longitude: 73.7366,
-    };
+
 
     // Helper to get coords from string address (Mock Geocoding)
     const getCoordinatesFromAddress = (address) => {
@@ -155,18 +200,18 @@ const MyRequestScreen = () => {
     }
 
     const toggleStatusFilter = (status) => {
-        if (filterStatus.includes(status)) {
-            setFilterStatus(filterStatus.filter(s => s !== status));
+        if (tempFilterStatus.includes(status)) {
+            setTempFilterStatus(tempFilterStatus.filter(s => s !== status));
         } else {
-            setFilterStatus([...filterStatus, status]);
+            setTempFilterStatus([...tempFilterStatus, status]);
         }
     };
 
     const toggleDistanceFilter = (distance) => {
-        if (filterDistance.includes(distance)) {
-            setFilterDistance(filterDistance.filter(d => d !== distance));
+        if (tempFilterDistance.includes(distance)) {
+            setTempFilterDistance(tempFilterDistance.filter(d => d !== distance));
         } else {
-            setFilterDistance([...filterDistance, distance]);
+            setTempFilterDistance([...tempFilterDistance, distance]);
         }
     };
 
@@ -183,7 +228,7 @@ const MyRequestScreen = () => {
 
         // Distance Filter
         if (filterDistance.length > 0) {
-            const dist = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, item.location);
+            const dist = calculateDistance(currentDoctorLocation.latitude, currentDoctorLocation.longitude, item.location);
             const matchesUnder2 = filterDistance.includes('Under 2km') && dist < 2;
             const matchesUnder5 = filterDistance.includes('Under 5km') && dist < 5;
 
@@ -203,8 +248,8 @@ const MyRequestScreen = () => {
             // Descending
             return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
         } else if (sortBy === 'Nearest First') {
-            const distA = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, a.location);
-            const distB = calculateDistance(doctorLocation.latitude, doctorLocation.longitude, b.location);
+            const distA = calculateDistance(currentDoctorLocation.latitude, currentDoctorLocation.longitude, a.location);
+            const distB = calculateDistance(currentDoctorLocation.latitude, currentDoctorLocation.longitude, b.location);
             return distA - distB;
         }
         return 0;
@@ -240,8 +285,8 @@ const MyRequestScreen = () => {
                         <Text style={[styles.symptoms, { color: theme.colors.textSecondary }]}>{item.symptoms}</Text>
                         <Text style={[styles.distance, { color: theme.colors.primary }]}>
                             {getDistanceFromLatLonInKm(
-                                doctorLocation.latitude,
-                                doctorLocation.longitude,
+                                currentDoctorLocation.latitude,
+                                currentDoctorLocation.longitude,
                                 item.location
                             )}
                         </Text>
@@ -286,7 +331,7 @@ const MyRequestScreen = () => {
                 </View>
                 <TouchableOpacity
                     style={[styles.filterButton, { backgroundColor: theme.colors.primary }]}
-                    onPress={() => setModalVisible(true)}
+                    onPress={openFilterModal}
                 >
                     <Icon name="tune" size={24} color="white" />
                 </TouchableOpacity>
@@ -326,14 +371,14 @@ const MyRequestScreen = () => {
                             <TouchableOpacity
                                 key={option}
                                 style={styles.optionRow}
-                                onPress={() => setSortBy(option)}
+                                onPress={() => setTempSortBy(option)}
                             >
                                 <View style={[
                                     styles.radioCircle,
                                     { borderColor: theme.colors.primary },
-                                    sortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                    tempSortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
                                 ]}>
-                                    {sortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                    {tempSortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
                             </TouchableOpacity>
@@ -352,9 +397,9 @@ const MyRequestScreen = () => {
                                 <View style={[
                                     styles.checkbox,
                                     { borderColor: theme.colors.primary },
-                                    filterStatus.includes(status) && { backgroundColor: theme.colors.primary }
+                                    tempFilterStatus.includes(status) && { backgroundColor: theme.colors.primary }
                                 ]}>
-                                    {filterStatus.includes(status) && <Icon name="check" size={14} color="white" />}
+                                    {tempFilterStatus.includes(status) && <Icon name="check" size={14} color="white" />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{status}</Text>
                             </TouchableOpacity>
@@ -371,9 +416,9 @@ const MyRequestScreen = () => {
                                 <View style={[
                                     styles.checkbox,
                                     { borderColor: theme.colors.primary },
-                                    filterDistance.includes(distance) && { backgroundColor: theme.colors.primary }
+                                    tempFilterDistance.includes(distance) && { backgroundColor: theme.colors.primary }
                                 ]}>
-                                    {filterDistance.includes(distance) && <Icon name="check" size={14} color="white" />}
+                                    {tempFilterDistance.includes(distance) && <Icon name="check" size={14} color="white" />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{distance}</Text>
                             </TouchableOpacity>
@@ -384,16 +429,16 @@ const MyRequestScreen = () => {
                         <TouchableOpacity
                             style={[styles.footerButton, { borderColor: theme.colors.border, borderWidth: 1 }]}
                             onPress={() => {
-                                setSortBy('Oldest First');
-                                setFilterStatus([]);
-                                setFilterDistance([]);
+                                setTempSortBy('Oldest First');
+                                setTempFilterStatus([]);
+                                setTempFilterDistance([]);
                             }}
                         >
                             <Text style={{ color: theme.colors.text }}>Reset</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.footerButton, { backgroundColor: theme.colors.primary }]}
-                            onPress={() => setModalVisible(false)}
+                            onPress={applyFilters}
                         >
                             <Text style={{ color: 'white', fontWeight: 'bold' }}>Apply</Text>
                         </TouchableOpacity>

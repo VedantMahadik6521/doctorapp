@@ -21,6 +21,8 @@ import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+import DatePicker from 'react-native-date-picker';
+
 const MedicalRecordsScreen = () => {
     const { theme } = useTheme();
     const navigation = useNavigation();
@@ -36,6 +38,40 @@ const MedicalRecordsScreen = () => {
     const [filterCategory, setFilterCategory] = useState([]);
     const [filterDemographics, setFilterDemographics] = useState([]);
 
+    // Temporary Filter States (for Modal)
+    const [tempSortBy, setTempSortBy] = useState('Last recently Visited');
+    const [tempFilterTimeFrame, setTempFilterTimeFrame] = useState(null);
+    const [tempFilterCategory, setTempFilterCategory] = useState([]);
+    const [tempFilterDemographics, setTempFilterDemographics] = useState([]);
+    const [tempCustomStartDate, setTempCustomStartDate] = useState('');
+    const [tempCustomEndDate, setTempCustomEndDate] = useState('');
+
+    const [openStartDatePicker, setOpenStartDatePicker] = useState(false);
+    const [openEndDatePicker, setOpenEndDatePicker] = useState(false);
+
+    const openFilterModal = () => {
+        setTempSortBy(sortBy);
+        setTempFilterTimeFrame(filterTimeFrame);
+        setTempFilterCategory([...filterCategory]);
+        setTempFilterDemographics([...filterDemographics]);
+        setTempCustomStartDate(customStartDate);
+        setTempCustomEndDate(customEndDate);
+        setModalVisible(true);
+    };
+
+    const applyFilters = () => {
+        setSortBy(tempSortBy);
+        setFilterTimeFrame(tempFilterTimeFrame);
+        setFilterCategory(tempFilterCategory);
+        setFilterDemographics(tempFilterDemographics);
+        setCustomStartDate(tempCustomStartDate);
+        setCustomEndDate(tempCustomEndDate);
+        setModalVisible(false);
+    };
+
+    // Grouping State
+    const [selectedPatient, setSelectedPatient] = useState(null);
+
     useEffect(() => {
         const user = auth().currentUser;
         if (!user) {
@@ -45,7 +81,7 @@ const MedicalRecordsScreen = () => {
 
         const unsubscribe = firestore()
             .collection('doctors')
-            .doc('100008')
+            .doc(user.uid)
             .collection('records')
             .orderBy('completedAt', 'desc')
             .onSnapshot(
@@ -76,17 +112,48 @@ const MedicalRecordsScreen = () => {
         return null;
     };
 
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+
     // Helper for Time Frame
     const checkTimeFrame = (timestamp, frame) => {
         if (!timestamp) return false;
         const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         const now = new Date();
-        const diffTime = Math.abs(now - date);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-        if (frame === 'Last 30 Days') return diffDays <= 30;
-        if (frame === 'Last 6 Months') return diffDays <= 180;
-        // Custom Date Range would need more UI, omitting for simple loop unless requested
+        if (frame === 'Last 30 Days') {
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays <= 30;
+        }
+        if (frame === 'Last 6 Months') {
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays <= 180;
+        }
+        if (frame === 'Custom Date Range') {
+            if (!customStartDate && !customEndDate) return true;
+
+            if (!customStartDate && !customEndDate) return true;
+
+            let start = new Date('1900-01-01');
+            let end = new Date();
+
+            if (customStartDate) {
+                const [day, month, year] = customStartDate.split('-');
+                start = new Date(`${year}-${month}-${day}`);
+            }
+
+            if (customEndDate) {
+                const [day, month, year] = customEndDate.split('-');
+                end = new Date(`${year}-${month}-${day}`);
+            }
+
+            // Set end of day for the end date inclusion
+            end.setHours(23, 59, 59, 999);
+
+            return date >= start && date <= end;
+        }
         return true;
     };
 
@@ -111,7 +178,10 @@ const MedicalRecordsScreen = () => {
     const filteredRecords = records.filter(item => {
         // Search
         const name = item.reportPrescription?.patientName?.toLowerCase() || '';
-        if (searchQuery && !name.includes(searchQuery.toLowerCase())) {
+        const issue = item.healthIssue?.toLowerCase() || '';
+        const searchLower = searchQuery.toLowerCase();
+
+        if (searchQuery && !name.includes(searchLower) && !issue.includes(searchLower)) {
             return false;
         }
 
@@ -122,8 +192,7 @@ const MedicalRecordsScreen = () => {
 
         // Category
         if (filterCategory.length > 0) {
-            // Assuming item.category or item.patientCategory exists
-            const cat = item.category || item.patientCategory || '';
+            const cat = item.reportPrescription?.patientType || '';
             if (!filterCategory.includes(cat)) return false;
         }
 
@@ -135,7 +204,7 @@ const MedicalRecordsScreen = () => {
         }
 
         return true;
-    }).sort((a, b) => {
+    }).sort((a, b) => { // Keep base sort for individual records in the drill-down
         const nameA = a.reportPrescription?.patientName || '';
         const nameB = b.reportPrescription?.patientName || '';
 
@@ -144,19 +213,99 @@ const MedicalRecordsScreen = () => {
             const timeB = b.completedAt?.seconds || 0;
             return timeB - timeA;
         } else if (sortBy === 'Alphabetical') {
-            // Logic: Compare names. If names are same, what next? User said:
-            // "abhishek aher and abhishek bakade then abhishek aher first"
-            // This is just standard string comparison.
             return nameA.localeCompare(nameB);
         } else if (sortBy === 'Frequency') {
-            const freq = getPatientFrequency();
-            const countA = freq[nameA] || 0;
-            const countB = freq[nameB] || 0;
-            if (countA !== countB) return countB - countA; // Higher freq first
-            return nameA.localeCompare(nameB); // Fallback to name
+            // Frequency sort might be weird for individual records but keeping consistency
+            return 0; // Handled better at group level
         }
         return 0;
     });
+
+    // Grouping Logic
+    const groupedPatientRecords = React.useMemo(() => {
+        const groups = {};
+        filteredRecords.forEach(record => {
+            // Fallback to name if ID is somehow missing to ensure grouping
+            const pId = record.patientId || record.reportPrescription?.patientName || 'unknown';
+            if (!groups[pId]) {
+                groups[pId] = {
+                    patientId: pId,
+                    patientName: record.reportPrescription?.patientName || 'Unknown Patient',
+                    patientImage: record.patientImage,
+                    records: [],
+                    latestDate: 0
+                };
+            }
+            groups[pId].records.push(record);
+            const recTime = record.completedAt?.seconds || 0;
+            if (recTime > groups[pId].latestDate) {
+                groups[pId].latestDate = recTime;
+            }
+        });
+
+        // Convert to array and sort groups based on sortBy
+        return Object.values(groups).sort((a, b) => {
+            if (sortBy === 'Last recently Visited') {
+                return b.latestDate - a.latestDate;
+            } else if (sortBy === 'Alphabetical') {
+                return a.patientName.localeCompare(b.patientName);
+            } else if (sortBy === 'Frequency') {
+                return b.records.length - a.records.length;
+            }
+            return 0;
+        });
+    }, [filteredRecords, sortBy]);
+
+    const handleBack = () => {
+        if (selectedPatient) {
+            setSelectedPatient(null);
+        } else {
+            navigation.goBack();
+        }
+    };
+
+    const renderPatientGroupItem = ({ item }) => {
+        const { patientName, patientImage, records } = item;
+        const count = records.length;
+        const latestRecord = records[0]; // Since filteredRecords is sorted by date desc generally? 
+        // Actually filteredRecords sort depends on state. 
+        // But we computed latestDate for the group sort.
+        // Let's just take the first one or find the one with latestDate if needed for display.
+        // But for "Health Issue", maybe show the latest one.
+
+        // Sorting records within group for display consistency (Latest first)
+        const sortedRecords = [...records].sort((a, b) => (b.completedAt?.seconds || 0) - (a.completedAt?.seconds || 0));
+        const latestIssue = sortedRecords[0]?.healthIssue || 'General Check-up';
+
+        return (
+            <TouchableOpacity
+                style={[styles.card, { backgroundColor: theme.colors.card }]}
+                onPress={() => setSelectedPatient({ ...item, records: sortedRecords })}
+            >
+                <View style={styles.cardHeader}>
+                    <Image
+                        source={patientImage ? { uri: patientImage } : require('../../assets/images/avatar.png')}
+                        style={styles.avatar}
+                        defaultSource={require('../../assets/images/avatar.png')}
+                    />
+                    <View style={styles.cardContent}>
+                        <Text style={[styles.name, { color: theme.colors.text }]}>
+                            {patientName}
+                        </Text>
+                        <Text style={[styles.healthIssue, { color: theme.colors.textSecondary }]}>
+                            Latest: <Text style={{ fontWeight: 'bold', color: theme.colors.text }}>{latestIssue}</Text>
+                        </Text>
+                        <Text style={[styles.subText, { color: theme.colors.primary, marginTop: 4 }]}>
+                            {count} Record{count !== 1 ? 's' : ''}
+                        </Text>
+                    </View>
+                    <View style={{ justifyContent: 'center' }}>
+                        <Icon name="chevron-right" size={30} color={theme.colors.textSecondary} />
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
 
     const renderRecordItem = ({ item }) => {
         const { reportPrescription, healthIssue, patientImage } = item;
@@ -213,13 +362,13 @@ const MedicalRecordsScreen = () => {
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Icon name="arrow-back" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Medical Records</Text>
                 <TouchableOpacity
                     style={[styles.filterButton, { backgroundColor: theme.colors.card }]}
-                    onPress={() => setModalVisible(true)}
+                    onPress={openFilterModal}
                 >
                     <Icon name="tune" size={20} color={theme.colors.text} />
                 </TouchableOpacity>
@@ -230,7 +379,7 @@ const MedicalRecordsScreen = () => {
                 <View style={[styles.searchBar, { backgroundColor: theme.colors.card }]}>
                     <Icon name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
                     <TextInput
-                        placeholder="Search Patient Here..."
+                        placeholder="Search Patient or Health Issue..."
                         placeholderTextColor={theme.colors.textSecondary}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -239,18 +388,40 @@ const MedicalRecordsScreen = () => {
                 </View>
             </View>
 
-            <FlatList
-                data={filteredRecords}
-                renderItem={renderRecordItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <Text style={{ color: theme.colors.textSecondary }}>No medical records found.</Text>
+            {!selectedPatient ? (
+                <FlatList
+                    data={groupedPatientRecords}
+                    renderItem={renderPatientGroupItem}
+                    keyExtractor={item => item.patientId}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Text style={{ color: theme.colors.textSecondary }}>No medical records found.</Text>
+                        </View>
+                    }
+                />
+            ) : (
+                <View style={{ flex: 1 }}>
+                    <View style={styles.subHeader}>
+                        <Text style={[styles.subHeaderTitle, { color: theme.colors.text }]}>
+                            Records for {selectedPatient.patientName}
+                        </Text>
                     </View>
-                }
-            />
+                    <FlatList
+                        data={selectedPatient.records}
+                        renderItem={renderRecordItem}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={styles.listContent}
+                        showsVerticalScrollIndicator={false}
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <Text style={{ color: theme.colors.textSecondary }}>No records for this patient.</Text>
+                            </View>
+                        }
+                    />
+                </View>
+            )}
 
             {/* Filter Modal */}
             <Modal
@@ -278,14 +449,14 @@ const MedicalRecordsScreen = () => {
                             <TouchableOpacity
                                 key={option}
                                 style={styles.optionRow}
-                                onPress={() => setSortBy(option)}
+                                onPress={() => setTempSortBy(option)}
                             >
                                 <View style={[
                                     styles.radioCircle,
                                     { borderColor: theme.colors.primary },
-                                    sortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                    tempSortBy === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
                                 ]}>
-                                    {sortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                    {tempSortBy === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
                             </TouchableOpacity>
@@ -297,20 +468,82 @@ const MedicalRecordsScreen = () => {
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Time Frame</Text>
                         {/* Radio buttons for Time Frame since date ranges usually mutually exclusive or single select */}
                         {['Last 30 Days', 'Last 6 Months', 'Custom Date Range'].map((option) => (
-                            <TouchableOpacity
-                                key={option}
-                                style={styles.optionRow}
-                                onPress={() => setFilterTimeFrame(filterTimeFrame === option ? null : option)}
-                            >
-                                <View style={[
-                                    styles.radioCircle,
-                                    { borderColor: theme.colors.primary },
-                                    filterTimeFrame === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
-                                ]}>
-                                    {filterTimeFrame === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
-                                </View>
-                                <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
-                            </TouchableOpacity>
+                            <View key={option}>
+                                <TouchableOpacity
+                                    style={styles.optionRow}
+                                    onPress={() => setTempFilterTimeFrame(tempFilterTimeFrame === option ? null : option)}
+                                >
+                                    <View style={[
+                                        styles.radioCircle,
+                                        { borderColor: theme.colors.primary },
+                                        tempFilterTimeFrame === option && { borderColor: theme.colors.primary, backgroundColor: 'white' }
+                                    ]}>
+                                        {tempFilterTimeFrame === option && <View style={[styles.selectedRb, { backgroundColor: theme.colors.primary }]} />}
+                                    </View>
+                                    <Text style={[styles.optionText, { color: theme.colors.text }]}>{option}</Text>
+                                </TouchableOpacity>
+
+                                {/* Custom Date Inputs */}
+                                {option === 'Custom Date Range' && tempFilterTimeFrame === 'Custom Date Range' && (
+                                    <View style={styles.dateInputContainer}>
+                                        <View style={styles.dateInputWrapper}>
+                                            <Text style={[styles.dateLabel, { color: theme.colors.textSecondary }]}>From (DD-MM-YYYY)</Text>
+                                            <TouchableOpacity
+                                                style={[styles.dateInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.background, justifyContent: 'center' }]}
+                                                onPress={() => setOpenStartDatePicker(true)}
+                                            >
+                                                <Text style={{ color: tempCustomStartDate ? theme.colors.text : theme.colors.textSecondary }}>
+                                                    {tempCustomStartDate || 'DD-MM-YYYY'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={styles.dateInputWrapper}>
+                                            <Text style={[styles.dateLabel, { color: theme.colors.textSecondary }]}>To (DD-MM-YYYY)</Text>
+                                            <TouchableOpacity
+                                                style={[styles.dateInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.background, justifyContent: 'center' }]}
+                                                onPress={() => setOpenEndDatePicker(true)}
+                                            >
+                                                <Text style={{ color: tempCustomEndDate ? theme.colors.text : theme.colors.textSecondary }}>
+                                                    {tempCustomEndDate || 'DD-MM-YYYY'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <DatePicker
+                                            modal
+                                            open={openStartDatePicker}
+                                            date={new Date()} // Default to today since we store string now
+                                            mode="date"
+                                            onConfirm={(date) => {
+                                                setOpenStartDatePicker(false);
+                                                const day = String(date.getDate()).padStart(2, '0');
+                                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                const year = date.getFullYear();
+                                                setTempCustomStartDate(`${day}-${month}-${year}`);
+                                            }}
+                                            onCancel={() => {
+                                                setOpenStartDatePicker(false);
+                                            }}
+                                        />
+                                        <DatePicker
+                                            modal
+                                            open={openEndDatePicker}
+                                            date={new Date()}
+                                            mode="date"
+                                            onConfirm={(date) => {
+                                                setOpenEndDatePicker(false);
+                                                const day = String(date.getDate()).padStart(2, '0');
+                                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                const year = date.getFullYear();
+                                                setTempCustomEndDate(`${day}-${month}-${year}`);
+                                            }}
+                                            onCancel={() => {
+                                                setOpenEndDatePicker(false);
+                                            }}
+                                        />
+                                    </View>
+                                )}
+                            </View>
                         ))}
 
                         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
@@ -321,14 +554,14 @@ const MedicalRecordsScreen = () => {
                             <TouchableOpacity
                                 key={cat}
                                 style={styles.optionRow}
-                                onPress={() => toggleFilter(filterCategory, setFilterCategory, cat)}
+                                onPress={() => toggleFilter(tempFilterCategory, setTempFilterCategory, cat)}
                             >
                                 <View style={[
                                     styles.checkbox,
                                     { borderColor: theme.colors.primary },
-                                    filterCategory.includes(cat) && { backgroundColor: theme.colors.primary }
+                                    tempFilterCategory.includes(cat) && { backgroundColor: theme.colors.primary }
                                 ]}>
-                                    {filterCategory.includes(cat) && <Icon name="check" size={14} color="white" />}
+                                    {tempFilterCategory.includes(cat) && <Icon name="check" size={14} color="white" />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{cat}</Text>
                             </TouchableOpacity>
@@ -342,14 +575,14 @@ const MedicalRecordsScreen = () => {
                             <TouchableOpacity
                                 key={demo}
                                 style={styles.optionRow}
-                                onPress={() => toggleFilter(filterDemographics, setFilterDemographics, demo)}
+                                onPress={() => toggleFilter(tempFilterDemographics, setTempFilterDemographics, demo)}
                             >
                                 <View style={[
                                     styles.checkbox,
                                     { borderColor: theme.colors.primary },
-                                    filterDemographics.includes(demo) && { backgroundColor: theme.colors.primary }
+                                    tempFilterDemographics.includes(demo) && { backgroundColor: theme.colors.primary }
                                 ]}>
-                                    {filterDemographics.includes(demo) && <Icon name="check" size={14} color="white" />}
+                                    {tempFilterDemographics.includes(demo) && <Icon name="check" size={14} color="white" />}
                                 </View>
                                 <Text style={[styles.optionText, { color: theme.colors.text }]}>{demo}</Text>
                             </TouchableOpacity>
@@ -361,17 +594,19 @@ const MedicalRecordsScreen = () => {
                         <TouchableOpacity
                             style={[styles.footerButton, { borderColor: theme.colors.border, borderWidth: 1 }]}
                             onPress={() => {
-                                setSortBy('Last recently Visited');
-                                setFilterTimeFrame(null);
-                                setFilterCategory([]);
-                                setFilterDemographics([]);
+                                setTempSortBy('Last recently Visited');
+                                setTempFilterTimeFrame(null);
+                                setTempCustomStartDate('');
+                                setTempCustomEndDate('');
+                                setTempFilterCategory([]);
+                                setTempFilterDemographics([]);
                             }}
                         >
                             <Text style={{ color: theme.colors.text }}>Reset</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.footerButton, { backgroundColor: theme.colors.primary }]}
-                            onPress={() => setModalVisible(false)}
+                            onPress={applyFilters}
                         >
                             <Text style={{ color: 'white', fontWeight: 'bold' }}>Apply</Text>
                         </TouchableOpacity>
@@ -571,6 +806,39 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginHorizontal: 5,
     },
+    subHeader: {
+        paddingHorizontal: 20,
+        paddingBottom: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        marginBottom: 10,
+    },
+    subHeaderTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    dateInputContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginLeft: 32, // Indent under radio button
+        marginTop: 5,
+        marginBottom: 10,
+    },
+    dateInputWrapper: {
+        flex: 1,
+        marginRight: 10,
+    },
+    dateLabel: {
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    dateInput: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 14,
+    }
 });
 
 export default MedicalRecordsScreen;

@@ -10,12 +10,19 @@ import {
   Dimensions,
   Platform,
   Alert,
-  PermissionsAndroid
+  PermissionsAndroid,
+  Switch
 } from 'react-native';
+import GetLocation from 'react-native-get-location';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
+import auth from '@react-native-firebase/auth'; // Import auth
+import firestore from '@react-native-firebase/firestore'; // Import firestore
+
+
+// ...
 
 // Mock Data for Testimonials
 const TESTIMONIALS = [
@@ -52,31 +59,147 @@ const HomeScreen2 = () => {
   const navigation = useNavigation();
   const [location, setLocation] = useState('India');
   const [activeSlide, setActiveSlide] = useState(0);
+  const [isOnline, setIsOnline] = useState(false); // State for online status
+  const [doctorName, setDoctorName] = useState('Vedant'); // State to store doctor name potentially
 
+  // Fetch initial status and listen for updates
+  useEffect(() => {
+    const user = auth().currentUser;
+    if (user) {
+      const unsubscribe = firestore()
+        .collection('doctors')
+        .doc(user.uid)
+        .onSnapshot(documentSnapshot => {
+          if (documentSnapshot && documentSnapshot.exists) {
+            const data = documentSnapshot.data();
+            setIsOnline(data.online2 || false); // Get online2 status, default to false
+            if (data.name) setDoctorName(data.name);
+          }
+        }, error => {
+          console.error("Error fetching doctor data: ", error);
+        });
+
+      return () => unsubscribe();
+    }
+  }, []);
+
+  const toggleOnlineStatus = async () => {
+    const user = auth().currentUser;
+    if (user) {
+      try {
+        const newStatus = !isOnline;
+        // Optimistic update
+        setIsOnline(newStatus);
+        await firestore().collection('doctors').doc(user.uid).update({
+          online2: newStatus
+        });
+        console.log(`Updated online2 status to: ${newStatus}`);
+      } catch (error) {
+        console.error("Error updating online status: ", error);
+        Alert.alert("Error", "Could not update status. Please try again.");
+        setIsOnline(!isOnline); // Revert on failure
+      }
+    } else {
+      Alert.alert("Error", "You are not logged in.");
+    }
+  };
+
+
+  // Reusing Location Logic from HomeScreen
+  // Reusing Location Logic from HomeScreen
   // Reusing Location Logic from HomeScreen
   const requestLocation = async () => {
     try {
+      // 1. Check Permissions Safely
+      let hasPermission = false;
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        );
+        try {
+          const granted = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+          ]);
 
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          // Alert.alert('Permission Required', 'Location permission is needed');
-          return;
+          const fineGranted = granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+          const coarseGranted = granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+
+          hasPermission = fineGranted || coarseGranted;
+        } catch (permError) {
+          console.log('Permission check failed:', permError);
         }
+      } else {
+        hasPermission = true; // Assume iOS handles it via Info.plist for now or add Geolocation.requestAuthorization()
       }
 
-      // Mocking location fetch if geolocation isn't available or simple logic
-      // In real app use navigator.geolocation
-      setLocation('Mumbai, India');
+      if (!hasPermission) {
+        // Just log and return, don't crash or alert aggressively on load
+        console.log('Location permission denied or failed.');
+        return;
+      }
+
+      // 2. Get Location via GetLocation
+      console.log('Requesting location via GetLocation...');
+
+      try {
+        const locationData = await GetLocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 60000,
+        });
+
+        console.log('Location fetched:', locationData);
+        const { latitude, longitude } = locationData;
+
+        try {
+          const API_KEY = 'AIzaSyBc9YbbzICoaIYZDF0EcPT4MnDkKZAzvnk';
+          const response = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${API_KEY}`
+          );
+          const json = await response.json();
+
+          if (json.results && json.results.length > 0) {
+            let city = '';
+            let state = '';
+
+            json.results[0].address_components.forEach(component => {
+              if (component.types.includes('locality')) {
+                city = component.long_name;
+              }
+              if (component.types.includes('administrative_area_level_1')) {
+                state = component.long_name;
+              }
+            });
+
+            if (!city) {
+              const subAdmin = json.results[0].address_components.find(c => c.types.includes('administrative_area_level_2'));
+              if (subAdmin) city = subAdmin.long_name;
+            }
+
+            if (city && state) {
+              setLocation(`${city}, ${state}`);
+            } else if (city) {
+              setLocation(city);
+            } else {
+              setLocation(json.results[0].formatted_address.split(',')[0]);
+            }
+          } else {
+            console.log('No geocoding results found.');
+          }
+        } catch (geoError) {
+          console.log('Geocoding error:', geoError);
+          Alert.alert('Geocoding Error', geoError.message);
+        }
+      } catch (error) {
+        const { code, message } = error;
+        console.warn(code, message);
+        Alert.alert('Location Error', message);
+      }
     } catch (err) {
-      console.log(err);
+      console.log('Unexpected error in requestLocation:', err);
     }
   };
 
   useEffect(() => {
     requestLocation();
+    // console.log('Location request skipped for debugging');
   }, []);
 
   const renderStars = (rating) => {
@@ -139,9 +262,29 @@ const HomeScreen2 = () => {
         {/* Header Content */}
         <View style={styles.headerContent}>
           <Text style={[styles.headerTitle, { color: '#FFFFFF' }]}>Manage Your Patients Efficiently</Text>
-          <Text style={[styles.headerSubtitle, { color: '#E0E0E0' }]}>
-            Welcome, Vedant please turn your status <Text style={{ color: '#00BFFF' }}>online </Text>
-          </Text>
+
+          {/* Welcome Text + Toggle Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.headerSubtitle, { color: '#E0E0E0', marginBottom: 5 }]}>
+                Welcome, {doctorName}
+              </Text>
+              <Text style={{ color: '#E0E0E0', fontSize: 12 }}>
+                you can change your status <Text style={{ color: isOnline ? '#32CC32' : '#FF4500', fontWeight: 'bold' }}>{isOnline ? 'online' : 'offline'}</Text>
+              </Text>
+            </View>
+
+            <View style={{ alignItems: 'center' }}>
+              <Switch
+                trackColor={{ false: "#767577", true: "#00BFFF" }}
+                thumbColor={isOnline ? "#f4f3f4" : "#f4f3f4"}
+                ios_backgroundColor="#3e3e3e"
+                onValueChange={toggleOnlineStatus}
+                value={isOnline}
+                style={{ transform: [{ scaleX: 1.2 }, { scaleY: 1.2 }] }} // Make it slightly bigger
+              />
+            </View>
+          </View>
         </View>
 
       </LinearGradient>
@@ -182,8 +325,8 @@ const HomeScreen2 = () => {
             <View key={item.id} style={[styles.testimonialCard, { width: width - 40, backgroundColor: '#A992E2' }]}>
               <Text style={{ position: 'absolute', right: 10, top: 10, fontSize: 10, color: '#fff' }}>{item.joined}</Text>
               <Text style={styles.testimonialName}>{item.name}</Text>
+              <Text style={{ color: '#E0E0E0', fontSize: 14, marginBottom: 8, fontStyle: 'italic' }}>{item.role}</Text>
               <Text style={styles.testimonialText}>"{item.text}"</Text>
-              <Text style={{ alignSelf: 'flex-end', color: '#fff', marginTop: 5 }}>- {item.role}</Text>
               <View style={{ marginTop: 10 }}>
                 {renderStars(item.rating)}
               </View>

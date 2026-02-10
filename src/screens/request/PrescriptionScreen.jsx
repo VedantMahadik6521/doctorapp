@@ -22,10 +22,12 @@ const PrescriptionScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { request } = route.params || {};
+    console.log('Request Data:', JSON.stringify(request, null, 2));
 
     const [name, setName] = useState(request?.patientName || '');
     const [age, setAge] = useState('');
-    const [gender, setGender] = useState('');
+    const [gender, setGender] = useState(request?.gender || request?.Gender || request?.sex || '');
+    const [patientType, setPatientType] = useState('');
     const [diagnosis, setDiagnosis] = useState('');
     const [medicineInput, setMedicineInput] = useState('');
     const [medicines, setMedicines] = useState([]);
@@ -33,6 +35,7 @@ const PrescriptionScreen = () => {
     const [otp, setOtp] = useState('');
     const [isSaved, setIsSaved] = useState(false);
     const [showGenderModal, setShowGenderModal] = useState(false);
+    const [showPatientTypeModal, setShowPatientTypeModal] = useState(false);
 
 
 
@@ -89,9 +92,39 @@ const PrescriptionScreen = () => {
         setMedicines(updatedMedicines);
     };
 
-    const handleSave = () => {
-        if (!name || !age || !gender) {
-            Alert.alert('Missing Details', 'Please fill in patient details (Name, Age, Gender).');
+    const [isWaitingForPatient, setIsWaitingForPatient] = useState(false);
+
+    // Listen for Patient Verification
+    useEffect(() => {
+        let unsubscribe;
+
+        if (isWaitingForPatient && request?.id) {
+            const currentUser = auth().currentUser;
+            if (currentUser) {
+                const requestRef = firestore()
+                    .collection('doctors')
+                    .doc(currentUser.uid)
+                    .collection('patients')
+                    .doc(request.id);
+
+                unsubscribe = requestRef.onSnapshot((doc) => {
+                    const data = doc.data();
+                    if (data && data.isPatientVerified === true) {
+                        // Patient verified! Complete service.
+                        completeService();
+                    }
+                });
+            }
+        }
+
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
+    }, [isWaitingForPatient, request]);
+
+    const handleSave = async () => {
+        if (!name || !age || !gender || !patientType) {
+            Alert.alert('Missing Details', 'Please fill in patient details (Name, Age, Gender, Patient Type).');
             return;
         }
         if (medicines.length === 0) {
@@ -103,30 +136,45 @@ const PrescriptionScreen = () => {
             patientName: name,
             age,
             gender,
+            patientType,
             diagnosis,
             medicines,
             instructions,
             date: new Date().toISOString()
         };
 
-        // Just Validate content effectively here
-        console.log('Prescription Data Ready:', JSON.stringify(prescriptionData, null, 2));
-        setIsSaved(true);
-        Alert.alert('Prescription Saved', 'Please enter the End Service OTP to complete the request.');
-    };
-
-    const handleSubmit = async () => {
-        if (otp.length !== 6) {
-            Alert.alert('Invalid OTP', 'Please enter a valid 6-digit End Service OTP.');
-            return;
-        }
+        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        setOtp(generatedOtp);
 
         try {
             const currentUser = auth().currentUser;
-            if (!currentUser) {
-                Alert.alert('Error', 'User not authenticated');
-                return;
+            if (currentUser) {
+                await firestore()
+                    .collection('doctors')
+                    .doc(currentUser.uid)
+                    .collection('patients')
+                    .doc(request.id)
+                    .update({
+                        prescription: prescriptionData,
+                        completionOtp: generatedOtp,
+                        isPatientVerified: false
+                    });
+
+                setIsSaved(true);
+                setIsWaitingForPatient(true);
+                Alert.alert('Prescription Saved', 'Share the generated OTP with the patient to complete the service.');
             }
+        } catch (error) {
+            console.error('Error saving prescription:', error);
+            Alert.alert('Error', 'Failed to save prescription.');
+        }
+    };
+
+    const completeService = async () => {
+        // No OTP check needed here as this is triggered by Listener verification
+        try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
 
             // Prepare Record Data
             const recordData = {
@@ -138,6 +186,7 @@ const PrescriptionScreen = () => {
                     patientName: name,
                     age,
                     gender,
+                    patientType,
                     diagnosis,
                     medicines,
                     instructions,
@@ -151,12 +200,12 @@ const PrescriptionScreen = () => {
             await firestore().runTransaction(async (transaction) => {
                 const newRecordRef = firestore()
                     .collection('doctors')
-                    .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                    .doc(currentUser.uid)
                     .collection('records')
                     .doc();
                 const patientRequestRef = firestore()
                     .collection('doctors')
-                    .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                    .doc(currentUser.uid)
                     .collection('patients')
                     .doc(request.id);
 
@@ -167,14 +216,15 @@ const PrescriptionScreen = () => {
                 transaction.delete(patientRequestRef);
             });
 
-            console.log('Finalizing Service with OTP:', otp);
+            console.log('Service Completed via Patient Verification');
+            setIsWaitingForPatient(false); // Stop listening
             Alert.alert('Service Completed', 'The request has been successfully completed and moved to records!', [
                 { text: 'OK', onPress: () => navigation.navigate('Dashboard') }
             ]);
 
         } catch (error) {
             console.error('Completion Error:', error);
-            Alert.alert('Error', 'Failed to complete service. Please try again.');
+            Alert.alert('Error', 'Failed to complete service. Please ensure connectivity.');
         }
     };
 
@@ -235,7 +285,7 @@ const PrescriptionScreen = () => {
                 />
 
                 <View style={styles.row}>
-                    <View style={{ flex: 1, marginRight: 10 }}>
+                    <View style={{ flex: 1, marginRight: 5 }}>
                         <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Age</Text>
                         <TextInput
                             style={[styles.input, { backgroundColor: theme.colors.card, color: theme.colors.text }]}
@@ -246,7 +296,7 @@ const PrescriptionScreen = () => {
                             keyboardType="numeric"
                         />
                     </View>
-                    <View style={{ flex: 1, marginLeft: 10 }}>
+                    <View style={{ flex: 1, marginHorizontal: 5 }}>
                         <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Gender</Text>
                         <TouchableOpacity
                             style={[styles.input, { backgroundColor: theme.colors.card, justifyContent: 'center' }]}
@@ -254,6 +304,17 @@ const PrescriptionScreen = () => {
                         >
                             <Text style={{ color: gender ? theme.colors.text : theme.colors.textSecondary }}>
                                 {gender || "Gender"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 5 }}>
+                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Type</Text>
+                        <TouchableOpacity
+                            style={[styles.input, { backgroundColor: theme.colors.card, justifyContent: 'center' }]}
+                            onPress={() => setShowPatientTypeModal(true)}
+                        >
+                            <Text style={{ color: patientType ? theme.colors.text : theme.colors.textSecondary }}>
+                                {patientType || "Type"}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -323,21 +384,20 @@ const PrescriptionScreen = () => {
                         <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 20 }]}>
                             End Service Verification
                         </Text>
-                        <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
-                            Enter OTP provided by patient to end service
+                        <Text style={[styles.inputLabel, { color: theme.colors.textSecondary, textAlign: 'center' }]}>
+                            Share this OTP with the patient
                         </Text>
-                        <TextInput
-                            style={[styles.input, styles.otpInput, { backgroundColor: theme.colors.card, color: theme.colors.text }]}
-                            placeholder="Enter 6-digit OTP"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={otp}
-                            onChangeText={setOtp}
-                            keyboardType="number-pad"
-                            maxLength={6}
-                        />
-                        <TouchableOpacity style={[styles.saveButton, { backgroundColor: '#32CD32' }]} onPress={handleSubmit}>
-                            <Text style={styles.saveButtonText}>Submit & End Service</Text>
-                        </TouchableOpacity>
+
+                        <Text style={[styles.otpDisplay, { color: theme.colors.primary }]}>
+                            {otp}
+                        </Text>
+
+                        <View style={styles.waitingContainer}>
+                            <Text style={{ color: theme.colors.textSecondary, fontStyle: 'italic' }}>
+                                Waiting for patient to verify...
+                            </Text>
+                            {/* Optional: Simple spinner or loader could go here */}
+                        </View>
                     </View>
                 )}
 
@@ -364,6 +424,36 @@ const PrescriptionScreen = () => {
                                 onPress={() => {
                                     setGender(option);
                                     setShowGenderModal(false);
+                                }}
+                            >
+                                <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>{option}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            <Modal
+                transparent={true}
+                visible={showPatientTypeModal}
+                animationType="fade"
+                onRequestClose={() => setShowPatientTypeModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowPatientTypeModal(false)}
+                >
+                    <View style={[styles.modalContainer, { backgroundColor: theme.colors.card }]}>
+                        <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Patient Type</Text>
+
+                        {['Chronic', 'Acute'].map((option) => (
+                            <TouchableOpacity
+                                key={option}
+                                style={styles.modalOption}
+                                onPress={() => {
+                                    setPatientType(option);
+                                    setShowPatientTypeModal(false);
                                 }}
                             >
                                 <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>{option}</Text>
@@ -514,6 +604,17 @@ const styles = StyleSheet.create({
         fontSize: 18,
         letterSpacing: 5,
         fontWeight: 'bold',
+    },
+    otpDisplay: {
+        fontSize: 32,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginVertical: 20,
+        letterSpacing: 5,
+    },
+    waitingContainer: {
+        alignItems: 'center',
+        padding: 10,
     },
     modalOverlay: {
         flex: 1,

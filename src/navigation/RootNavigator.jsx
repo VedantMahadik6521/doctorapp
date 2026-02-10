@@ -20,6 +20,8 @@ import RequestDetailsScreen from '../screens/request/RequestDetailsScreen';
 import RefundScreen from '../screens/request/RefundScreen';
 import PaymentMethodScreen from '../screens/request/PaymentMethodScreen';
 import PrescriptionScreen from '../screens/request/PrescriptionScreen';
+import PDFViewerScreen from '../screens/common/PDFViewerScreen';
+import PatientDetailsScreen from '../screens/records/PatientDetailsScreen';
 
 /* Entry Gate */
 import AppEntryGate from './AppEntryGate';
@@ -67,13 +69,19 @@ const RootNavigator = () => {
       <Stack.Screen name="RefundScreen" component={RefundScreen} />
       <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
       <Stack.Screen name="PrescriptionScreen" component={PrescriptionScreen} />
-      <Stack.Screen name="PatientDetails" component={require('../screens/records/PatientDetailsScreen').default} />
+      <Stack.Screen name="PatientDetails" component={PatientDetailsScreen} />
+      <Stack.Screen name="PDFViewer" component={PDFViewerScreen} />
       {/* Keeping legacy Home temporarily if needed, but Dashboard is primary now */}
       <Stack.Screen name="Home" component={HomeScreen} />
       {/* <Stack.Screen name="Home2" component={HomeScreen2} /> Removed to force Dashboard usage */}
       <Stack.Screen name="AnalyticsScreen" component={AnalyticsScreen} />
       <Stack.Screen name="AllTestimonialsScreen" component={AllTestimonialsScreen} />
       <Stack.Screen name="NotificationScreen" component={NotificationScreen} />
+
+      {/* Settings Sub-screens */}
+      <Stack.Screen name="AccountInfo" component={require('../screens/settings/AccountInfoScreen').default} />
+      <Stack.Screen name="TermsCondition" component={require('../screens/settings/TermsConditionScreen').default} />
+      <Stack.Screen name="PrivacyPolicy" component={require('../screens/settings/PrivacyPolicyScreen').default} />
     </Stack.Navigator>
   );
 };

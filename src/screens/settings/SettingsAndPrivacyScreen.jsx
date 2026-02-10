@@ -37,10 +37,10 @@ const SettingsAndPrivacyScreen = () => {
     };
 
 
-    const SettingCard = ({ icon, title, subtitle, isSwitch, value, onToggle, hasArrow, isDestructive, dangerText }) => (
+    const SettingCard = ({ icon, title, subtitle, isSwitch, value, onToggle, hasArrow, isDestructive, dangerText, onPress }) => (
         <TouchableOpacity
             style={[styles.card, { backgroundColor: theme.colors.card }]}
-            onPress={!isSwitch && !isDestructive ? () => { } : isDestructive ? handleDeleteAccount : null}
+            onPress={isSwitch ? null : (isDestructive ? handleDeleteAccount : onPress)}
             activeOpacity={isSwitch ? 1 : 0.7}
         >
             <View style={styles.cardContent}>
@@ -108,17 +108,20 @@ const SettingsAndPrivacyScreen = () => {
                     icon={<Icon name="person" size={20} color="#7C3AED" />} // Purple Icon
                     title="Account Information"
                     hasArrow
+                    onPress={() => navigation.navigate('AccountInfo')}
                 />
 
                 <SettingCard
                     icon={<Icon name="description" size={20} color="#7C3AED" />}
                     title="Terms and condition"
                     hasArrow
+                    onPress={() => navigation.navigate('TermsCondition')}
                 />
                 <SettingCard
                     icon={<Icon name="privacy-tip" size={20} color="#7C3AED" />}
                     title="Privacy Policy"
                     hasArrow
+                    onPress={() => navigation.navigate('PrivacyPolicy')}
                 />
 
                 {/* Delete Account - Spaced out */}

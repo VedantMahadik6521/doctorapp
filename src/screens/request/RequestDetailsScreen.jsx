@@ -30,10 +30,16 @@ const RequestDetailsScreen = () => {
     const route = useRoute();
     const { request } = route.params || {};
 
-    const [isAccepted, setIsAccepted] = useState(false);
+    const [isAccepted, setIsAccepted] = useState(
+        ['Partially Accepted', 'Accepted', 'In Progress'].includes(request?.status)
+    );
     const [otp, setOtp] = useState('');
-    const [isServiceStarted, setIsServiceStarted] = useState(false);
-    const [isPaymentReceived, setIsPaymentReceived] = useState(false); // New state for payment tracking
+    const [isServiceStarted, setIsServiceStarted] = useState(
+        request?.status === 'In Progress'
+    );
+    const [isPaymentReceived, setIsPaymentReceived] = useState(
+        request?.status === 'In Progress'
+    ); // New state for payment tracking
     const [showRefundModal, setShowRefundModal] = useState(false);
 
     // Fixed Start Location: Orabelle Bhoomi Infracon, Ravet
@@ -68,11 +74,12 @@ const RequestDetailsScreen = () => {
     const handleAccept = async () => {
         setIsAccepted(true);
         try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
+
             await firestore()
                 .collection('doctors')
-            await firestore()
-                .collection('doctors')
-                .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                .doc(currentUser.uid)
                 .collection('patients')
                 .doc(request.id)
                 .update({
@@ -86,11 +93,12 @@ const RequestDetailsScreen = () => {
 
     const handleReject = async () => {
         try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
+
             await firestore()
                 .collection('doctors')
-            await firestore()
-                .collection('doctors')
-                .doc('100008') // Using hardcoded ID to match MyRequestScreen
+                .doc(currentUser.uid)
                 .collection('patients')
                 .doc(request.id)
                 .update({
@@ -111,17 +119,39 @@ const RequestDetailsScreen = () => {
     const handleConfirmRefund = () => {
         setShowRefundModal(false);
         // Navigate to Refund Screen
-        navigation.navigate('RefundScreen', { amount: '500' });
+        navigation.navigate('RefundScreen', {
+            amount: request?.advancePaymentAmount || '0',
+            upiId: request?.upiId || ''
+        });
     };
 
-    const handleStartService = () => {
+    const handleStartService = async () => {
         if (otp.length !== 5) { // Assuming 5 digit OTP as per input maxLength
             Alert.alert('Invalid OTP', 'Please enter a valid 5-digit OTP.');
             return;
         }
-        // In real app, verify OTP with backend here
-        Alert.alert('Success', 'Service Started!');
-        setIsServiceStarted(true);
+
+        try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
+
+            await firestore()
+                .collection('doctors')
+                .doc(currentUser.uid)
+                .collection('patients')
+                .doc(request.id)
+                .update({
+                    status: 'In Progress'
+                });
+
+            // In real app, verify OTP with backend here
+            Alert.alert('Success', 'Service Started!');
+            setIsServiceStarted(true);
+
+        } catch (error) {
+            console.error('Error starting service:', error);
+            Alert.alert('Error', 'Failed to start service');
+        }
     };
 
     const handleCompleteService = () => {
@@ -129,9 +159,6 @@ const RequestDetailsScreen = () => {
     };
 
     const openGoogleMapsNavigation = () => {
-        // origin: Orabeele Bhoomi Infracon Ravet
-        // destination: Patient Location (either lat,long or address string if available)
-
         let destinationQuery = '';
         if (request?.location?.latitude && request?.location?.longitude) {
             destinationQuery = `${request.location.latitude},${request.location.longitude}`;
@@ -142,17 +169,19 @@ const RequestDetailsScreen = () => {
             destinationQuery = `${patientLocation.latitude},${patientLocation.longitude}`;
         }
 
-        // Using origin name instead of cords for better UX in Maps app if possible, or we can use fixed cords
-        // "Orabeele Bhoomi Infracon Ravet"
-        const originQuery = 'Orabeele+Bhoomi+Infracon+Ravet';
-
-        const url = `https://www.google.com/maps/dir/?api=1&origin=${originQuery}&destination=${destinationQuery}&travelmode=driving`;
+        // Use native navigation intents
+        const url = Platform.select({
+            ios: `maps://?daddr=${destinationQuery}&dirflg=d`,
+            android: `google.navigation:q=${destinationQuery}`
+        });
 
         Linking.canOpenURL(url).then(supported => {
             if (supported) {
                 Linking.openURL(url);
             } else {
-                Alert.alert('Error', 'Google Maps is not supported on this device.');
+                // Fallback to web browser if native app not found
+                const browserUrl = `https://www.google.com/maps/dir/?api=1&destination=${destinationQuery}&travelmode=driving`;
+                Linking.openURL(browserUrl).catch(err => Alert.alert('Error', 'Could not open maps.'));
             }
         });
     };
@@ -249,7 +278,7 @@ const RequestDetailsScreen = () => {
                             style={[styles.actionButton, { backgroundColor: '#4B2E83', marginTop: 15 }]}
                             onPress={handleCompleteService}
                         >
-                            <Text style={styles.buttonText}>Complete & Prescribe</Text>
+                            <Text style={styles.buttonText}>Write Prescription</Text>
                         </TouchableOpacity>
                     </View>
                 )}
