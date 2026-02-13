@@ -68,9 +68,7 @@ const HelpCenterScreen = () => {
     const [submitting, setSubmitting] = useState(false);
     const [showVisitDropdown, setShowVisitDropdown] = useState(false);
 
-    // Details Modal State
-    const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-    const [selectedTicket, setSelectedTicket] = useState(null);
+
 
     useEffect(() => {
         const user = auth().currentUser;
@@ -201,10 +199,9 @@ const HelpCenterScreen = () => {
     const renderTicketItem = (ticket) => (
         <TouchableOpacity
             key={ticket.id}
-            style={styles.ticketItem}
+            style={[styles.ticketItem, { backgroundColor: theme.colors.card }]}
             onPress={() => {
-                setSelectedTicket(ticket);
-                setDetailsModalVisible(true);
+                navigation.navigate('TicketDetails', { ticket });
             }}
         >
             <View style={styles.ticketHeaderRow}>
@@ -249,7 +246,7 @@ const HelpCenterScreen = () => {
 
                 {tickets.length > 0 ? (
                     <View style={{ marginBottom: 20 }}>
-                        <View style={{ height: 320, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 5 }}>
+                        <View style={{ height: 320, backgroundColor: theme.isDarkMode ? 'transparent' : '#f9f9f9', borderRadius: 10, padding: 5 }}>
                             <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
                                 {tickets.map(renderTicketItem)}
                             </ScrollView>
@@ -259,9 +256,9 @@ const HelpCenterScreen = () => {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <View style={styles.ticketCard}>
+                    <View style={[styles.ticketCard, { backgroundColor: theme.colors.card }]}>
                         <Icon name="local-offer" size={40} color="#AAA" style={{ marginBottom: 10 }} />
-                        <Text style={styles.noTicketText}>No tickets yet</Text>
+                        <Text style={[styles.noTicketText, { color: theme.colors.text }]}>No tickets yet</Text>
                         <Text style={styles.ticketSubText}>Create a ticket if you need help with any visit</Text>
 
                         <TouchableOpacity style={styles.createButton} onPress={() => setModalVisible(true)}>
@@ -294,13 +291,13 @@ const HelpCenterScreen = () => {
                     {FAQS.map((item, index) => {
                         const isExpanded = expandedIndex === index;
                         return (
-                            <View key={index} style={styles.faqItem}>
+                            <View key={index} style={[styles.faqItem, { backgroundColor: theme.colors.card }]}>
                                 <TouchableOpacity
                                     style={styles.faqHeader}
                                     onPress={() => toggleExpand(index)}
                                     activeOpacity={0.7}
                                 >
-                                    <Text style={styles.faqQuestion}>{item.question}</Text>
+                                    <Text style={[styles.faqQuestion, { color: theme.colors.text }]}>{item.question}</Text>
                                     <Icon
                                         name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
                                         size={20}
@@ -309,7 +306,7 @@ const HelpCenterScreen = () => {
                                 </TouchableOpacity>
                                 {isExpanded && (
                                     <View style={styles.faqBody}>
-                                        <Text style={styles.faqAnswer}>{item.answer}</Text>
+                                        <Text style={[styles.faqAnswer, { color: theme.colors.textSecondary }]}>{item.answer}</Text>
                                     </View>
                                 )}
                             </View>
@@ -327,31 +324,31 @@ const HelpCenterScreen = () => {
                 onRequestClose={() => setModalVisible(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Create New Ticket</Text>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Create New Ticket</Text>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                <Icon name="close" size={24} color="#333" />
+                                <Icon name="close" size={24} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
 
-                        <Text style={styles.inputLabel}>Select Visit</Text>
+                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Select Visit</Text>
                         <TouchableOpacity
-                            style={styles.dropdownSelector}
+                            style={[styles.dropdownSelector, { backgroundColor: theme.isDarkMode ? '#333' : '#F5F5F5' }]}
                             onPress={() => setShowVisitDropdown(!showVisitDropdown)}
                         >
-                            <Text style={{ color: selectedVisit ? '#333' : '#999' }}>
+                            <Text style={{ color: selectedVisit ? theme.colors.text : '#999' }}>
                                 {selectedVisit ? (selectedVisit.patientName || `Visit #${selectedVisit.id.substr(0, 5)}`) : 'Select a previous visit'}
                             </Text>
                             <Icon name="keyboard-arrow-down" size={20} color="#666" />
                         </TouchableOpacity>
 
                         {showVisitDropdown && (
-                            <View style={styles.dropdownList}>
+                            <View style={[styles.dropdownList, { backgroundColor: theme.colors.card, borderColor: theme.isDarkMode ? '#444' : '#EEE' }]}>
                                 <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
                                     {/* Other Complaint Option */}
                                     <TouchableOpacity
-                                        style={[styles.dropdownItem]}
+                                        style={[styles.dropdownItem, { borderBottomColor: theme.isDarkMode ? '#444' : '#EEE' }]}
                                         onPress={() => {
                                             setSelectedVisit({ id: 'other', patientName: 'Other Complaint', healthIssue: 'General Issue' });
                                             setShowVisitDropdown(false);
@@ -366,13 +363,13 @@ const HelpCenterScreen = () => {
                                         visits.map((visit) => (
                                             <TouchableOpacity
                                                 key={visit.id}
-                                                style={styles.dropdownItem}
+                                                style={[styles.dropdownItem, { borderBottomColor: theme.isDarkMode ? '#444' : '#EEE' }]}
                                                 onPress={() => {
                                                     setSelectedVisit(visit);
                                                     setShowVisitDropdown(false);
                                                 }}
                                             >
-                                                <Text style={styles.dropdownItemText}>
+                                                <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>
                                                     {visit.patientName} - {visit.healthIssue}
                                                 </Text>
                                             </TouchableOpacity>
@@ -387,18 +384,18 @@ const HelpCenterScreen = () => {
                         )}
 
 
-                        <Text style={styles.inputLabel}>Issue Title</Text>
+                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Issue Title</Text>
                         <TextInput
-                            style={styles.input}
+                            style={[styles.input, { backgroundColor: theme.isDarkMode ? '#333' : '#F5F5F5', color: theme.colors.text }]}
                             placeholder="e.g., Follow-up visit needed"
                             placeholderTextColor="#999"
                             value={issueTitle}
                             onChangeText={setIssueTitle}
                         />
 
-                        <Text style={styles.inputLabel}>Describe Issue</Text>
+                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Describe Issue</Text>
                         <TextInput
-                            style={[styles.input, styles.textArea]}
+                            style={[styles.input, styles.textArea, { backgroundColor: theme.isDarkMode ? '#333' : '#F5F5F5', color: theme.colors.text }]}
                             placeholder="Please describe the issue..."
                             placeholderTextColor="#999"
                             multiline={true}
@@ -442,74 +439,11 @@ const HelpCenterScreen = () => {
                         <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                             <Text style={styles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
-
                     </View>
                 </View>
             </Modal>
 
-            {/* Ticket Details Modal */}
-            <Modal
-                animationType="fade"
-                transparent={true}
-                visible={detailsModalVisible}
-                onRequestClose={() => setDetailsModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Ticket Details</Text>
-                            <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
-                                <Icon name="close" size={24} color="#333" />
-                            </TouchableOpacity>
-                        </View>
-                        {selectedTicket && (
-                            <ScrollView showsVerticalScrollIndicator={false}>
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Ticket ID:</Text>
-                                    <Text style={styles.detailValue}>{selectedTicket.ticketId || selectedTicket['ticket id']}</Text>
-                                </View>
 
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Status:</Text>
-                                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedTicket.status) + '20' }]}>
-                                        <Text style={[styles.statusText, { color: getStatusColor(selectedTicket.status) }]}>
-                                            {selectedTicket.status}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Date:</Text>
-                                    <Text style={styles.detailValue}>
-                                        {selectedTicket.createdAt?.toDate ? selectedTicket.createdAt.toDate().toLocaleString() : 'N/A'}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.detailSection}>
-                                    <Text style={styles.detailLabel}>Issue Title:</Text>
-                                    <Text style={styles.detailValueLarge}>{selectedTicket.issueTitle}</Text>
-                                </View>
-
-                                <View style={styles.detailSection}>
-                                    <Text style={styles.detailLabel}>Description:</Text>
-                                    <Text style={styles.detailValueLarge}>{selectedTicket.DescribeIssue}</Text>
-                                </View>
-
-                                {selectedTicket.adminReply && (
-                                    <View style={[styles.detailSection, { backgroundColor: '#f9f9f9', padding: 10, borderRadius: 8, marginTop: 10 }]}>
-                                        <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>Admin Reply:</Text>
-                                        <Text style={styles.detailValueLarge}>{selectedTicket.adminReply}</Text>
-                                    </View>
-                                )}
-
-                            </ScrollView>
-                        )}
-                        <TouchableOpacity style={[styles.cancelButton, { marginTop: 20 }]} onPress={() => setDetailsModalVisible(false)}>
-                            <Text style={styles.cancelButtonText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
         </SafeAreaView>
     );
@@ -648,7 +582,7 @@ const styles = StyleSheet.create({
 
     // Ticket List Styles
     ticketItem: {
-        backgroundColor: '#FFF',
+        // backgroundColor: set dynamically
         padding: 15,
         borderRadius: 10,
         marginBottom: 10,
@@ -667,7 +601,7 @@ const styles = StyleSheet.create({
     ticketId: {
         fontSize: 14,
         fontWeight: 'bold',
-        color: '#333',
+        // color: set dynamically
     },
     statusBadge: {
         paddingHorizontal: 10,

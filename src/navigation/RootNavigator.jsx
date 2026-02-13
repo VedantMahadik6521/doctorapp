@@ -78,6 +78,10 @@ const RootNavigator = () => {
       <Stack.Screen name="AllTestimonialsScreen" component={AllTestimonialsScreen} />
       <Stack.Screen name="NotificationScreen" component={NotificationScreen} />
 
+      {/* Help Center Flow */}
+      <Stack.Screen name="TicketDetails" component={require('../screens/help/TicketDetailsScreen').default} />
+      <Stack.Screen name="TicketChat" component={require('../screens/help/TicketChatScreen').default} />
+
       {/* Settings Sub-screens */}
       <Stack.Screen name="AccountInfo" component={require('../screens/settings/AccountInfoScreen').default} />
       <Stack.Screen name="TermsCondition" component={require('../screens/settings/TermsConditionScreen').default} />
