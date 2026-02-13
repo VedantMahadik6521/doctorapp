@@ -20,6 +20,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import NotificationService from '../../services/NotificationService';
 
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBc9YbbzICoaIYZDF0EcPT4MnDkKZAzvnk';
@@ -154,6 +155,91 @@ const RequestDetailsScreen = () => {
         }
     };
 
+    // New function to simulate payment and trigger cloud function
+    const handleSimulatePayment = async () => {
+        try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
+
+            // 1. Update UI state immediately
+            setIsPaymentReceived(true);
+
+            // 2. Update Doctor's subcollection (This NOW triggers the Cloud Function)
+            // Path: doctors/{uid}/patients/{requestId}
+            await firestore()
+                .collection('doctors')
+                .doc(currentUser.uid)
+                .collection('patients')
+                .doc(request.id)
+                .update({
+                    isPaymentReceived: true,
+                    advancePaid: true,
+                    advancePaymentStatus: 'Completed',
+                    advancePaymentAmount: 500
+                });
+
+            // Note: Cloud Function now listens to this path: doctors/{doctorId}/patients/{requestId}
+            // So it will detect this update and send the notification.
+
+            Alert.alert('Success', 'Payment simulated & Notification sent (via Backend).');
+
+        } catch (error) {
+            console.error("Error simulating payment:", error);
+            Alert.alert('Error', 'Failed to update payment status.');
+        }
+    };
+
+    // New function to handle arrival
+    const handleArrived = async () => {
+        try {
+            // Example update - adjust based on your actual data model if needed
+            // Using current request object structure
+            // Note: You might need to add a 'doctorReached' field to your request document in Firestore if it doesn't exist
+            // For now, I'll assume we are updating the request status or a specific field
+
+            // If you want to update 'doctorReached' in the patient request document:
+            const currentUser = auth().currentUser;
+            if (!currentUser) return;
+
+            // Find where the request is stored. Based on previous code:
+            // doctors/{uid}/patients/{requestId}
+
+            await firestore()
+                .collection('doctors')
+                .doc(currentUser.uid)
+                .collection('patients')
+                .doc(request.id)
+                .update({
+                    doctorReached: true,
+                    // status: 'Arrived' // Optional: if you have an 'Arrived' status
+                });
+
+            NotificationService.displayLocalNotification(
+                "You have reached destination",
+                "You can now proceed with the visit."
+            );
+
+            // Save to Firestore for Notification Screen
+            await firestore()
+                .collection('doctors')
+                .doc(currentUser.uid)
+                .collection('notifications')
+                .add({
+                    title: "Reached Destination",
+                    message: "You have reached the destination.",
+                    timestamp: firestore.FieldValue.serverTimestamp(),
+                    type: 'local',
+                    read: false
+                });
+
+            Alert.alert('Success', 'You have marked yourself as arrived.');
+
+        } catch (error) {
+            console.error("Error marking arrival:", error);
+            Alert.alert('Error', 'Failed to mark arrival.');
+        }
+    };
+
     const handleCompleteService = () => {
         navigation.navigate('PrescriptionScreen', { request });
     };
@@ -239,7 +325,7 @@ const RequestDetailsScreen = () => {
                         {/* Simulation Button */}
                         <TouchableOpacity
                             style={[styles.actionButton, { backgroundColor: '#FFA726', marginTop: 15, marginHorizontal: 40 }]}
-                            onPress={() => setIsPaymentReceived(true)}
+                            onPress={handleSimulatePayment}
                         >
                             <Text style={styles.buttonText}>Simulate Payment Received</Text>
                         </TouchableOpacity>
@@ -281,6 +367,16 @@ const RequestDetailsScreen = () => {
                             <Text style={styles.buttonText}>Write Prescription</Text>
                         </TouchableOpacity>
                     </View>
+                )}
+
+                {/* Arrived Button */}
+                {isAccepted && !isServiceStarted && (
+                    <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#FF8C00', marginBottom: 20, alignSelf: 'center', width: '90%' }]}
+                        onPress={handleArrived}
+                    >
+                        <Text style={styles.buttonText}>Mark as Arrived</Text>
+                    </TouchableOpacity>
                 )}
 
                 {/* Live Tracking Title & Navigate Button */}

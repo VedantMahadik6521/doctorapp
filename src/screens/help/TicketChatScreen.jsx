@@ -83,6 +83,28 @@ const TicketChatScreen = () => {
         }
     };
 
+    const handleReceiveAdminMessage = async () => {
+        if (!currentUser || !ticket) return;
+
+        try {
+            await firestore()
+                .collection('doctors')
+                .doc(currentUser.uid)
+                .collection('Ticket')
+                .doc(ticket.id)
+                .collection('messages')
+                .add({
+                    text: "This is a dummy admin message.",
+                    senderId: 'admin_123', // distinct senderId
+                    senderType: 'admin',
+                    createdAt: firestore.FieldValue.serverTimestamp(),
+                });
+            console.log("Dummy admin message added");
+        } catch (error) {
+            console.error("Error adding dummy admin message:", error);
+        }
+    };
+
     const renderMessage = ({ item }) => {
         const isMyMessage = item.senderType === 'doctor' || item.senderId === currentUser.uid;
 
@@ -122,7 +144,10 @@ const TicketChatScreen = () => {
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerTitle}>Admin</Text>
                 </View>
-                <View style={{ width: 40 }} />
+                {/* Temporary Debug Button for Admin Messages */}
+                <TouchableOpacity onPress={handleReceiveAdminMessage} style={{ padding: 5 }}>
+                    <Icon name="person-add" size={24} color="red" />
+                </TouchableOpacity>
             </View>
 
 

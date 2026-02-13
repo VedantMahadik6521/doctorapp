@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import NotificationService from '../services/NotificationService';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 const AppEntryGate = ({ navigation }) => {
   useEffect(() => {
@@ -61,6 +63,15 @@ const AppEntryGate = ({ navigation }) => {
         }
 
         // ✅ Verified + Online
+
+        // Initialize Notification Service
+        const hasPermission = await NotificationService.requestUserPermission();
+        if (hasPermission) {
+          await NotificationService.getFCMToken(user);
+          await NotificationService.createChannel();
+          NotificationService.createNotificationListeners();
+        }
+
         navigation.replace('Dashboard');
       } catch (error) {
         console.error('EntryGate Error:', error);
