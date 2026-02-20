@@ -43,6 +43,17 @@ const AppEntryGate = ({ navigation }) => {
 
 
 
+        // Initialize Notification Service for ALL users (so we have token for verification updates)
+        const hasPermission = await NotificationService.requestUserPermission();
+        if (hasPermission) {
+          await NotificationService.getFCMToken(user);
+          // Only create listeners/channels - essential for foreground, but token is key for background
+          if (Platform.OS === 'android') {
+            await NotificationService.createChannel();
+          }
+          NotificationService.createNotificationListeners();
+        }
+
         // Flow decision
         if (!profileCompleted) {
           navigation.replace('Profile');
@@ -63,15 +74,6 @@ const AppEntryGate = ({ navigation }) => {
         }
 
         // ✅ Verified + Online
-
-        // Initialize Notification Service
-        const hasPermission = await NotificationService.requestUserPermission();
-        if (hasPermission) {
-          await NotificationService.getFCMToken(user);
-          await NotificationService.createChannel();
-          NotificationService.createNotificationListeners();
-        }
-
         navigation.replace('Dashboard');
       } catch (error) {
         console.error('EntryGate Error:', error);

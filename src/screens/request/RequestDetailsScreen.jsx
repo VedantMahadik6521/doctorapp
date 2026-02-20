@@ -21,9 +21,17 @@ import { useTheme } from '../../context/ThemeContext';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import NotificationService from '../../services/NotificationService';
+import Geolocation from 'react-native-geolocation-service';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBc9YbbzICoaIYZDF0EcPT4MnDkKZAzvnk';
+
+// Fixed Start Location: Orabelle Bhoomi Infracon, Ravet
+const doctorLocation = {
+    latitude: 18.6433,
+    longitude: 73.7366,
+};
 
 const RequestDetailsScreen = () => {
     const { theme } = useTheme();
@@ -42,16 +50,60 @@ const RequestDetailsScreen = () => {
         request?.status === 'In Progress'
     ); // New state for payment tracking
     const [showRefundModal, setShowRefundModal] = useState(false);
+    const [currentLocation, setCurrentLocation] = useState(doctorLocation); // Initialize directly
+    const [isNavigating, setIsNavigating] = useState(false);
 
-    // Fixed Start Location: Orabelle Bhoomi Infracon, Ravet
-    const doctorLocation = {
-        latitude: 18.6433,
-        longitude: 73.7366,
-    };
+    // Initialize currentLocation with doctorLocation if not set
+    // AND try to get actual location immediately
+    // Enable live tracking immediately to sync with Blue Dot
+    React.useEffect(() => {
+        let watchId = null;
+
+        const startTracking = async () => {
+            let granted = false;
+            if (Platform.OS === 'ios') {
+                const auth = await Geolocation.requestAuthorization('whenInUse');
+                granted = auth === 'granted';
+            } else {
+                try {
+                    const auth = await Geolocation.requestAuthorization('whenInUse');
+                    granted = auth === 'granted';
+                } catch (err) {
+                    console.warn(err);
+                }
+            }
+
+            if (granted) {
+                watchId = Geolocation.watchPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        setCurrentLocation({ latitude, longitude });
+                    },
+                    (error) => {
+                        console.log('Error watching location:', error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        distanceFilter: 10,
+                        interval: 5000,
+                        fastestInterval: 2000,
+                        showLocationDialog: true,
+                        forceRequestLocation: true
+                    }
+                );
+            }
+        };
+
+        startTracking();
+
+        return () => {
+            if (watchId !== null) {
+                Geolocation.clearWatch(watchId);
+            }
+        };
+    }, []);
 
     // Patient Location from request or fallback
-    // Assuming request.location might be an object {latitude, longitude} or undefined for now
-    // If it's a string address in your real data, we'll need geocoding or just pass the address string to valid maps scheme
     const mapRef = React.useRef(null);
 
     // Patient Location from request or fallback
@@ -244,7 +296,51 @@ const RequestDetailsScreen = () => {
         navigation.navigate('PrescriptionScreen', { request });
     };
 
+    const startLiveTracking = () => {
+        if (isNavigating) return;
+        setIsNavigating(true);
+
+        const requestLocationPermission = async () => {
+            if (Platform.OS === 'ios') {
+                const auth = await Geolocation.requestAuthorization('whenInUse');
+                return auth === 'granted';
+            } else {
+                // For Android, usually handled by PermissionsAndroid or the library's requestAuthorization
+                // But react-native-geolocation-service requestAuthorization works for both if configured
+                try {
+                    const granted = await Geolocation.requestAuthorization('whenInUse');
+                    return granted === 'granted';
+                } catch (err) {
+                    console.warn(err);
+                    return false;
+                }
+            }
+        };
+
+        requestLocationPermission().then(granted => {
+            if (granted) {
+                Geolocation.watchPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        setCurrentLocation({ latitude, longitude });
+
+                        // Optional: Update firestore with live location if needed for patient to see
+                    },
+                    (error) => {
+                        console.log(error.code, error.message);
+                        Alert.alert('Location Error', 'Unable to fetch live location.');
+                    },
+                    { enableHighAccuracy: true, distanceFilter: 10, interval: 5000, fastestInterval: 2000 }
+                );
+            } else {
+                Alert.alert('Permission Denied', 'Location permission is required for live tracking.');
+            }
+        });
+    };
+
     const openGoogleMapsNavigation = () => {
+        startLiveTracking();
+
         let destinationQuery = '';
         if (request?.location?.latitude && request?.location?.longitude) {
             destinationQuery = `${request.location.latitude},${request.location.longitude}`;
@@ -405,10 +501,18 @@ const RequestDetailsScreen = () => {
                         showsUserLocation={true}
                         showsMyLocationButton={true}
                     >
-                        <Marker coordinate={doctorLocation} title="Orabelle Bhoomi Infracon" description="Start Location" pinColor="blue" />
-                        <Marker coordinate={patientLocation} title={request.patientName} description="Patient Location" pinColor="red" />
+                        <Marker coordinate={currentLocation || doctorLocation} title="You" description="Your Location">
+                            <View style={styles.customMarkerDoctor}>
+                                <Icon name="plus" size={15} color="white" />
+                            </View>
+                        </Marker>
+                        <Marker coordinate={patientLocation} title={request.patientName} description="Patient Location">
+                            <View style={styles.customMarkerPatient}>
+                                <Icon name="home" size={15} color="white" />
+                            </View>
+                        </Marker>
                         <MapViewDirections
-                            origin={doctorLocation}
+                            origin={currentLocation || doctorLocation}
                             destination={patientLocation}
                             apikey={GOOGLE_MAPS_APIKEY}
                             strokeWidth={4}
@@ -678,6 +782,26 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
         color: 'white',
+    },
+    customMarkerDoctor: {
+        backgroundColor: '#4285F4', // Blue
+        padding: 8,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: 'white',
+        elevation: 5,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    customMarkerPatient: {
+        backgroundColor: '#FF6347', // Red
+        padding: 8,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: 'white',
+        elevation: 5,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

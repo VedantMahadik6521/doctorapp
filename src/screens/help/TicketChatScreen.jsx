@@ -25,7 +25,6 @@ const TicketChatScreen = () => {
     const { theme } = useTheme();
 
     const [messages, setMessages] = useState([]);
-    const [showAll, setShowAll] = useState(false);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const flatListRef = useRef(null);
@@ -154,21 +153,11 @@ const TicketChatScreen = () => {
 
             <FlatList
                 ref={flatListRef}
-                data={showAll ? messages : messages.slice(-5)}
+                data={messages}
                 renderItem={renderMessage}
                 keyExtractor={item => item.id}
                 contentContainerStyle={styles.messagesList}
                 showsVerticalScrollIndicator={false}
-                ListHeaderComponent={
-                    !showAll && messages.length > 5 ? (
-                        <TouchableOpacity
-                            style={styles.viewAllButton}
-                            onPress={() => setShowAll(true)}
-                        >
-                            <Text style={styles.viewAllText}>View All Messages</Text>
-                        </TouchableOpacity>
-                    ) : null
-                }
             />
 
             <KeyboardAvoidingView

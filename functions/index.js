@@ -108,3 +108,97 @@ exports.advancePaymentNotification = functions.firestore
             }
         }
     });
+
+// 3. Send Notification on Visit Completion (Deletion of Request)
+exports.visitCompletedNotification = functions.firestore
+    .document("doctors/{doctorId}/patients/{requestId}")
+    .onDelete(async (snap, context) => {
+        const deletedData = snap.data();
+        const doctorId = context.params.doctorId;
+
+        try {
+            const doctorDoc = await admin.firestore().collection("doctors").doc(doctorId).get();
+
+            if (!doctorDoc.exists) return;
+
+            const token = doctorDoc.data().fcmToken;
+            if (token) {
+                const messageTitle = "Visit Completed";
+                const messageBody = `You have successfully completed the visit for ${deletedData.patientName || 'patient'}.`;
+
+                // Save to Firestore (History)
+                await admin.firestore()
+                    .collection("doctors")
+                    .doc(doctorId)
+                    .collection("notifications")
+                    .add({
+                        title: messageTitle,
+                        message: messageBody,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'visit_completed',
+                        requestId: context.params.requestId,
+                        read: false
+                    });
+
+                // Send Push Notification
+                await admin.messaging().send({
+                    notification: {
+                        title: messageTitle,
+                        body: messageBody,
+                    },
+                    token: token,
+                });
+                console.log("Visit completion notification sent to:", doctorId);
+            }
+        } catch (error) {
+            console.error("Error sending completion notification:", error);
+        }
+    });
+
+// 4. Send Notification on Doctor Verification
+exports.verifyDoctorNotification = functions.firestore
+    .document("doctors/{doctorId}")
+    .onUpdate(async (change, context) => {
+        const before = change.before.data();
+        const after = change.after.data();
+
+        // Check if verified status changed from false/undefined to true
+        if (!before.verified && after.verified === true) {
+            const doctorId = context.params.doctorId;
+            const token = after.fcmToken;
+
+            if (token) {
+                const messageTitle = "Verification Completed";
+                const messageBody = "Your verification is completed. You can now use the app.";
+
+                try {
+                    // Save to Firestore (Notification History)
+                    await admin.firestore()
+                        .collection("doctors")
+                        .doc(doctorId)
+                        .collection("notifications")
+                        .add({
+                            title: messageTitle,
+                            message: messageBody,
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            type: 'verification_completed',
+                            read: false
+                        });
+
+                    // Send Push Notification
+                    await admin.messaging().send({
+                        notification: {
+                            title: messageTitle,
+                            body: messageBody,
+                        },
+                        token: token,
+                    });
+                    console.log("Verification notification sent to:", doctorId);
+                } catch (error) {
+                    console.error("Error sending verification notification:", error);
+                }
+            } else {
+                console.log("No FCM token found for verified doctor:", doctorId);
+            }
+        }
+    });

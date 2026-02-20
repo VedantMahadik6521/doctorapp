@@ -12,12 +12,41 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 const TicketDetailsScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { ticket } = route.params || {};
     const { theme } = useTheme();
+    const [latestMessages, setLatestMessages] = useState([]);
+
+    const currentUser = auth().currentUser;
+
+    React.useEffect(() => {
+        if (!ticket || !currentUser) return;
+
+        const unsubscribe = firestore()
+            .collection('doctors')
+            .doc(currentUser.uid)
+            .collection('Ticket')
+            .doc(ticket.id || ticket.ticketId)
+            .collection('messages')
+            .orderBy('createdAt', 'desc')
+            .limit(5)
+            .onSnapshot(snapshot => {
+                const fetchedMessages = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).reverse(); // Reverse to show in chronological order
+                setLatestMessages(fetchedMessages);
+            }, error => {
+                console.error("Error fetching latest messages:", error);
+            });
+
+        return () => unsubscribe();
+    }, [ticket]);
 
     if (!ticket) {
         return (
@@ -99,16 +128,53 @@ const TicketDetailsScreen = () => {
                 </View>
 
 
-                {/* Start Discussion Section */}
+                {/* Latest Messages Section */}
+                <View style={styles.section}>
+                    <Text style={[styles.label, { color: theme.colors.textSecondary || '#888' }]}>Latest Messages</Text>
+                    {latestMessages.length > 0 ? (
+                        <View style={styles.messagesPreview}>
+                            {latestMessages.map((item) => {
+                                const isMyMessage = item.senderType === 'doctor' || item.senderId === currentUser?.uid;
+                                return (
+                                    <View key={item.id} style={[
+                                        styles.messageContainer,
+                                        isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer
+                                    ]}>
+                                        <View style={[
+                                            styles.messageBubble,
+                                            isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble,
+                                            { backgroundColor: isMyMessage ? '#DCF8C6' : '#FFFFFF' }
+                                        ]}>
+                                            <Text style={[styles.messageText, { color: '#000' }]}>
+                                                {item.text}
+                                            </Text>
+                                            <Text style={[styles.timestamp, { color: theme.isDarkMode ? '#555' : '#999' }]}>
+                                                {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    ) : (
+                        <Text style={[styles.noMessagesText, { color: theme.colors.textSecondary || '#888' }]}>No messages yet.</Text>
+                    )}
+
+                    <TouchableOpacity onPress={() => navigation.navigate('TicketChat', { ticket })}>
+                        <Text style={styles.viewAllLink}>View all messages</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Chat with us Section */}
                 <View style={[styles.discussionSection, { backgroundColor: theme.colors.card }]}>
                     <Text style={[styles.discussionText, { color: theme.colors.text }]}>
-                        If you want to discuss with admin click start discussion
+                        If you want to discuss with admin click chat with us
                     </Text>
                     <TouchableOpacity
                         style={[styles.discussionButton, { backgroundColor: theme.colors.primary }]}
                         onPress={() => navigation.navigate('TicketChat', { ticket })}
                     >
-                        <Text style={styles.discussionButtonText}>Start Discussion</Text>
+                        <Text style={styles.discussionButtonText}>Chat with us</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -210,6 +276,52 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    messagesPreview: {
+        marginTop: 5,
+        marginBottom: 10,
+    },
+    messageContainer: {
+        marginVertical: 5,
+        flexDirection: 'row',
+    },
+    myMessageContainer: {
+        justifyContent: 'flex-end',
+    },
+    otherMessageContainer: {
+        justifyContent: 'flex-start',
+    },
+    messageBubble: {
+        maxWidth: '75%',
+        padding: 10,
+        borderRadius: 10,
+        elevation: 1,
+    },
+    myMessageBubble: {
+        borderTopRightRadius: 0,
+    },
+    otherMessageBubble: {
+        borderTopLeftRadius: 0,
+    },
+    messageText: {
+        fontSize: 15,
+    },
+    timestamp: {
+        fontSize: 10,
+        color: '#999',
+        alignSelf: 'flex-end',
+        marginTop: 5,
+    },
+    noMessagesText: {
+        fontSize: 14,
+        fontStyle: 'italic',
+        marginBottom: 10,
+    },
+    viewAllLink: {
+        color: 'red',
+        fontWeight: 'bold',
+        fontSize: 14,
+        marginTop: 5,
     }
 });
 
